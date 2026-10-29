@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <meta name="description" content="Gestão pessoal de faturas, com armazenamento local.">
+  <title>Faturas — Gestão pessoal</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/responsive.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Faturas - início" data-page="dashboard">
+        <span class="brand-mark">F</span><span>Faturas</span>
+      </a>
+      <nav class="side-nav" aria-label="Navegação principal">
+        <button class="nav-link active" data-page="dashboard"><span>▦</span> Dashboard</button>
+        <button class="nav-link" data-page="capture"><span>＋</span> Nova fatura</button>
+        <button class="nav-link" data-page="history"><span>▤</span> Histórico</button>
+        <button class="nav-link" data-page="export"><span>⇧</span> Exportação</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="privacy-note"><span class="privacy-dot"></span><span>Os teus dados ficam no dispositivo.</span></div>
+        <button class="nav-link theme-button" id="theme-toggle"><span>◐</span> Alternar tema</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">F</span><strong>Faturas</strong></div>
+        <div class="topbar-spacer"></div>
+        <span class="offline-indicator" id="connection-status"><span class="status-dot"></span> A verificar ligação</span>
+      </header>
+
+      <section class="page active" id="page-dashboard">
+        <div class="page-heading">
+          <div><p class="eyebrow">VISÃO GERAL</p><h1>Dashboard</h1><p class="muted">Resumo da tua atividade.</p></div>
+          <button class="primary-button" data-page="capture"><span>＋</span> Nova fatura</button>
+        </div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-label">Faturas registadas <span>▤</span></div><div class="stat-value" id="stat-count">0</div><div class="stat-foot">Total de documentos</div></article>
+          <article class="stat-card"><div class="stat-label">Total de despesas <span>€</span></div><div class="stat-value" id="stat-total">0,00 €</div><div class="stat-foot">Soma das faturas</div></article>
+          <article class="stat-card"><div class="stat-label">Total de IVA <span>%</span></div><div class="stat-value" id="stat-vat">0,00 €</div><div class="stat-foot">Imposto registado</div></article>
+          <article class="stat-card"><div class="stat-label">Este mês <span>◷</span></div><div class="stat-value" id="stat-month">0</div><div class="stat-foot">Faturas no mês atual</div></article>
+        </div>
+        <div class="section-heading"><div><h2>Atividade recente</h2><p class="muted">As faturas mais recentes aparecerão aqui.</p></div><button class="text-button" data-page="history">Ver histórico →</button></div>
+        <div class="empty-state">
+          <div class="empty-icon">▤</div><h3>Ainda não existem faturas</h3>
+          <p>Quando começares a registar faturas, encontrarás aqui um resumo da tua atividade.</p>
+          <button class="secondary-button" data-page="capture">Registar primeira fatura</button>
+        </div>
+      </section>
+
+      <section class="page" id="page-capture">
+        <div class="page-heading"><div><p class="eyebrow">DOCUMENTOS</p><h1>Nova fatura</h1><p class="muted">Adiciona uma fatura através da câmara ou de uma imagem.</p></div></div>
+        <div class="capture-grid">
+          <div class="feature-panel capture-panel">
+            <div class="feature-icon">＋</div><h2>Imagem da fatura</h2>
+            <p>Fotografa ou importa uma imagem. A imagem fica apenas neste dispositivo.</p>
+            <div class="capture-actions"><label class="primary-button file-button"><span>▣</span> Tirar fotografia<input id="invoice-camera" type="file" accept="image/*" capture="environment"></label><label class="secondary-button file-button"><span>↑</span> Importar imagem<input id="invoice-image" type="file" accept="image/jpeg,image/png,image/webp"></label></div>
+            <div class="image-preview-wrap hidden" id="image-preview-wrap"><img id="image-preview" alt="Pré-visualização da fatura"><button class="text-button" type="button" id="remove-image">Remover imagem</button></div>
+          </div>
+          <form class="form-panel" id="invoice-form">
+            <div class="form-heading"><div><h2>Dados da fatura</h2><p class="muted">Confirma os dados antes de guardar.</p></div><span class="status-label">Validação manual</span></div>
+            <input id="invoice-id" type="hidden">
+            <div class="form-grid"><label>Número da fatura<input id="invoice-number" name="number" autocomplete="off"></label><label>Data<input id="invoice-date" name="date" type="date" required></label><label class="wide">Fornecedor<input id="invoice-supplier" name="supplier" autocomplete="organization" required></label><label>NIF do fornecedor<input id="invoice-vat-number" name="vatNumber" inputmode="numeric" pattern="[0-9]{9}"></label><label>Base tributável<input id="invoice-subtotal" name="subtotal" inputmode="decimal" placeholder="0,00"></label><label>IVA<input id="invoice-vat" name="vat" inputmode="decimal" placeholder="0,00"></label><label>Total<input id="invoice-total" name="total" inputmode="decimal" placeholder="0,00" required></label></div>
+            <p class="form-error" id="form-error" role="alert"></p><div class="form-actions"><button class="secondary-button" type="button" id="clear-form">Limpar</button><button class="primary-button" type="submit">Guardar fatura</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="page" id="page-history">
+        <div class="page-heading"><div><p class="eyebrow">DOCUMENTOS</p><h1>Histórico</h1><p class="muted">Consulta e gere as tuas faturas.</p></div></div>
+        <div class="toolbar"><input id="history-search" type="search" placeholder="Pesquisar fornecedor, NIF ou número" aria-label="Pesquisar faturas"><button class="secondary-button" type="button" id="history-clear">Limpar pesquisa</button></div><div id="history-list" class="invoice-list"></div>
+      </section>
+
+      <section class="page" id="page-export">
+        <div class="page-heading"><div><p class="eyebrow">DADOS</p><h1>Exportação</h1><p class="muted">Prepara ficheiros Excel com os teus registos.</p></div></div>
+        <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe os registos</h2><p class="muted">Os filtros não alteram o histórico.</p></div></div><label>Modalidade<select id="export-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="selected">Selecionadas no histórico</option></select></label><div class="form-grid export-filters"><label id="export-start-wrap">Data inicial<input id="export-start" type="date"></label><label id="export-end-wrap">Data final<input id="export-end" type="date"></label><label class="wide" id="export-supplier-wrap">Fornecedor<select id="export-supplier"><option value="">Escolher fornecedor</option></select></label></div><div class="export-summary" id="export-summary">0 faturas · 0,00 €</div><button class="primary-button" id="export-button" type="button"><span>⇩</span> Gerar ficheiro Excel</button></div></div>
+      </section>
+
+      <footer class="app-footer"><span>Faturas · Versão 0.2.0</span><span id="storage-note">Armazenamento local ativo</span></footer>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Navegação móvel">
+    <button class="mobile-nav-link active" data-page="dashboard"><span>▦</span><small>Início</small></button>
+    <button class="mobile-nav-link" data-page="capture"><span>＋</span><small>Nova</small></button>
+    <button class="mobile-nav-link" data-page="history"><span>▤</span><small>Histórico</small></button>
+    <button class="mobile-nav-link" data-page="export"><span>⇧</span><small>Exportar</small></button>
+  </nav>
+  <script src="./js/app.js"></script>
+</body>
+</html>
