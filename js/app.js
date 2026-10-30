@@ -11,7 +11,8 @@
   const $ = selector => document.querySelector(selector);
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
   const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
-  const normalizeInvoiceNumber = value => String(value || "").replace(/\D/g, "");
+  const normalizeInvoiceNumber = value => String(value || "").toUpperCase().replace(/[^A-Z0-9./ -]/g, "").replace(/\s+/g, " ").trim();
+  const documentNumberPattern = /^(FT|FR|FS|NC|ND|RC)\s*[A-Z0-9./ -]*\d[A-Z0-9./ -]*$/i;
   const escapeXml = value => String(value ?? "").replace(/[<>&'\"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char]));
 
   function openDatabase() {
@@ -172,8 +173,8 @@
     if (dateMatch) result.date = `${dateMatch[3]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[1].padStart(2, "0")}`;
     const nifMatch = text.match(/(?:NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/i);
     if (nifMatch) result.vatNumber = nifMatch[1].replace(/\D/g, "");
-    const numberMatch = text.match(/\bFT\s*[:#./-]?\s*([0-9][0-9 ./-]*)/i);
-    if (numberMatch) result.number = numberMatch[1].replace(/\D/g, "");
+    const numberMatch = text.match(/\b(FT|FR|FS|NC|ND|RC)\s*[:#./-]?\s*([A-Z0-9][A-Z0-9 ./-]*\d[A-Z0-9 ./-]*)\b/i);
+    if (numberMatch) result.number = `${numberMatch[1].toUpperCase()} ${numberMatch[2]}`.replace(/\s+/g, " ").trim();
     const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
     const vatIndex = upper.findIndex(line => /\bIVA\b|IMPOSTO/.test(line));
     const subtotalIndex = upper.findIndex(line => /BASE TRIBUT|SUBTOTAL|INCIDÊNCIA/.test(line));
@@ -194,8 +195,8 @@
     const result = {};
     if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
     if (fields.F && /^\d{4}-\d{2}-\d{2}$/.test(fields.F)) result.date = fields.F;
-    const qrNumber = fields.G?.match(/\bFT\s*[:#./-]?\s*([0-9][0-9 ./-]*)/i);
-    if (qrNumber) result.number = qrNumber[1].replace(/\D/g, "");
+    const qrNumber = fields.G?.match(/\b(FT|FR|FS|NC|ND|RC)\s*[:#./-]?\s*([A-Z0-9][A-Z0-9 ./-]*\d[A-Z0-9 ./-]*)\b/i);
+    if (qrNumber) result.number = `${qrNumber[1].toUpperCase()} ${qrNumber[2]}`.replace(/\s+/g, " ").trim();
     const total = fields.R;
     if (total) result.total = parseMoney(total);
     if (fields.Q) result.vat = parseMoney(fields.Q);
@@ -296,6 +297,7 @@
 
   function validateInvoice(invoice) {
     if (!invoice.date || !invoice.supplier || !invoice.total) return "Preenche a data, o fornecedor e o total.";
+    if (invoice.number && !documentNumberPattern.test(invoice.number)) return "O número deve começar por FT, FR, FS, NC, ND ou RC e conter algarismos.";
     if (invoice.vatNumber && !/^\d{9}$/.test(invoice.vatNumber)) return "O NIF deve ter 9 algarismos.";
     if (invoice.subtotal && invoice.vat && Math.abs(invoice.subtotal + invoice.vat - invoice.total) > 0.03) return "A base tributável + IVA não coincide com o total.";
     return "";
@@ -353,7 +355,7 @@
   $("#zoom-out").addEventListener("click", () => setPreviewZoom(previewZoom - 0.25));
   $("#zoom-reset").addEventListener("click", () => setPreviewZoom(1));
   $("#zoom-in").addEventListener("click", () => setPreviewZoom(previewZoom + 0.25));
-  $("#invoice-number").addEventListener("input", event => { event.target.value = event.target.value.replace(/\D/g, ""); });
+  $("#invoice-number").addEventListener("input", event => { event.target.value = normalizeInvoiceNumber(event.target.value); });
   $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; $("#image-preview").removeAttribute("src"); $("#image-preview").style.transform = "scale(1)"; $("#image-preview-wrap").classList.add("hidden"); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
