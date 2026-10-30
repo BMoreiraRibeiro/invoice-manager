@@ -12,6 +12,8 @@
 
   const $ = selector => document.querySelector(selector);
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
+  const displayDate = value => { const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || ""); };
+  const inputDate = value => { const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : String(value || ""); };
   const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
   const normalizeInvoiceNumber = value => String(value || "").toUpperCase().replace(/[^A-Z0-9./ -]/g, "").replace(/\s+/g, " ").trim();
   const documentNumberPattern = /^(FT|FR|FS|NC|ND|RC)\s*[A-Z0-9./ -]*\d[A-Z0-9./ -]*$/i;
@@ -73,7 +75,7 @@
     $("#stat-month").textContent = invoices.filter(invoice => invoice.date.startsWith(month)).length;
     const empty = $("#page-dashboard .empty-state");
     if (invoices.length) {
-      empty.innerHTML = `<div class="recent-list">${invoices.slice(0, 5).map(invoice => `<div class="recent-row"><span><strong>${escapeXml(invoice.supplier)}</strong><small>${escapeXml(invoice.date)} · ${escapeXml(invoice.number || "Sem número")}</small></span><strong>${money(invoice.total)}</strong></div>`).join("")}</div>`;
+      empty.innerHTML = `<div class="recent-list">${invoices.slice(0, 5).map(invoice => `<div class="recent-row"><span><strong>${escapeXml(invoice.supplier)}</strong><small>${escapeXml(displayDate(invoice.date))} · ${escapeXml(invoice.number || "Sem número")}</small></span><strong>${money(invoice.total)}</strong></div>`).join("")}</div>`;
     } else {
       empty.innerHTML = '<div class="empty-icon">▤</div><h3>Ainda não existem faturas</h3><p>Quando começares a registar faturas, encontrarás aqui um resumo da tua atividade.</p><button class="secondary-button" data-page="capture">Registar primeira fatura</button>';
       empty.querySelector("[data-page]").addEventListener("click", () => showPage("capture"));
@@ -88,7 +90,7 @@
       list.innerHTML = '<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>As faturas guardadas aparecerão aqui.</p></div>';
       return;
     }
-    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong><span>${escapeXml(invoice.date)} · ${escapeXml(invoice.number || "Sem número")}</span><small>NIF ${escapeXml(invoice.vatNumber || "não indicado")} · IVA ${money(invoice.vat)}</small></div><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions"><label class="select-invoice"><input type="checkbox" data-select-invoice="${invoice.id}"> Exportar</label><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar">×</button></div></article>`).join("");
+    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong><span>${escapeXml(displayDate(invoice.date))} · ${escapeXml(invoice.number || "Sem número")}</span><small>NIF ${escapeXml(invoice.vatNumber || "não indicado")} · IVA ${money(invoice.vat)}</small></div><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions"><label class="select-invoice"><input type="checkbox" data-select-invoice="${invoice.id}"> Exportar</label><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar">×</button></div></article>`).join("");
     list.querySelectorAll("[data-edit-invoice]").forEach(button => button.addEventListener("click", () => editInvoice(button.dataset.editInvoice)));
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
@@ -355,7 +357,7 @@
   function currentExportInvoices() {
     const mode = $("#export-mode").value;
     if (mode === "selected") return invoices.filter(invoice => document.querySelector(`[data-select-invoice="${invoice.id}"]`)?.checked);
-    if (mode === "dates") return invoices.filter(invoice => (!$("#export-start").value || invoice.date >= $("#export-start").value) && (!$("#export-end").value || invoice.date <= $("#export-end").value));
+    if (mode === "dates") return invoices.filter(invoice => (!$("#export-start").value || invoice.date >= inputDate($("#export-start").value)) && (!$("#export-end").value || invoice.date <= inputDate($("#export-end").value)));
     if (mode === "supplier") { const key = $("#export-supplier").value; return key ? invoices.filter(invoice => (invoice.vatNumber || invoice.supplier) === key) : []; }
     return invoices;
   }
@@ -378,7 +380,7 @@
     const rows = currentExportInvoices();
     if (!rows.length) return alert("Não existem faturas para exportar com estes critérios.");
     const header = ["Número da fatura", "Data", "Fornecedor", "NIF", "Base tributável", "IVA", "Total"];
-    const values = [header, ...rows.map(invoice => [invoice.number, invoice.date, invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2)]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
+    const values = [header, ...rows.map(invoice => [invoice.number, displayDate(invoice.date), invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2)]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
     const sheetRows = values.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, cellIndex) => `<c r="${String.fromCharCode(65 + cellIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`).join("")}</row>`).join("");
     const files = [{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' }, { name: "_rels/.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' }, { name: "xl/workbook.xml", data: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Faturas" sheetId="1" r:id="rId1"/></sheets></workbook>' }, { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' }, { name: "xl/worksheets/sheet1.xml", data: `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:G${values.length - 1}"/></worksheet>` }];
     const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = `faturas-${new Date().toISOString().slice(0, 10)}.xlsx`; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
@@ -403,6 +405,7 @@
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
   ["#export-mode", "#export-start", "#export-end", "#export-supplier"].forEach(selector => $(selector).addEventListener("change", updateExport));
+  ["#export-start", "#export-end"].forEach(selector => $(selector).addEventListener("blur", event => { if (event.target.value && !/^\d{2}\/\d{2}\/\d{4}$/.test(event.target.value)) event.target.setCustomValidity("Usa o formato dia/mês/ano: dd/mm/aaaa."); else event.target.setCustomValidity(""); }));
   $("#export-button").addEventListener("click", exportXlsx);
 
   const themeButton = $("#theme-toggle"); const savedTheme = localStorage.getItem("invoice-theme"); if (savedTheme === "dark") document.documentElement.dataset.theme = "dark";
