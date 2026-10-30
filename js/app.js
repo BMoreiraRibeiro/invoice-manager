@@ -95,6 +95,17 @@
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
 
+  function updateSupplierSuggestions() {
+    const suggestions = $("#supplier-suggestions");
+    if (!suggestions) return;
+    const unique = new Map();
+    invoices.forEach(invoice => {
+      const supplier = String(invoice.supplier || "").trim();
+      if (supplier && !unique.has(supplier.toLocaleLowerCase("pt-PT"))) unique.set(supplier.toLocaleLowerCase("pt-PT"), { name: supplier, vatNumber: invoice.vatNumber });
+    });
+    suggestions.innerHTML = [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-PT")).map(item => `<option value="${escapeXml(item.name)}"${item.vatNumber ? ` label="NIF ${escapeXml(item.vatNumber)}"` : ""}></option>`).join("");
+  }
+
   function fillForm(invoice) {
     $("#invoice-id").value = invoice?.id || "";
     $("#invoice-number").value = invoice?.number || "";
@@ -403,7 +414,7 @@
     const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
-  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); }
+  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); updateSupplierSuggestions(); }
 
   document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
