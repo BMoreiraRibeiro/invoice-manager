@@ -369,7 +369,6 @@
 
   function currentExportInvoices() {
     const mode = $("#export-mode").value;
-    if (mode === "selected") return invoices.filter(invoice => document.querySelector(`[data-select-invoice="${invoice.id}"]`)?.checked);
     if (mode === "dates") return invoices.filter(invoice => (!$("#export-start").value || invoice.date >= inputDate($("#export-start").value)) && (!$("#export-end").value || invoice.date <= inputDate($("#export-end").value)));
     if (mode === "supplier") { const key = $("#export-supplier").value; return key ? invoices.filter(invoice => (invoice.vatNumber || invoice.supplier) === key) : []; }
     return invoices;
@@ -388,7 +387,6 @@
       return `Faturas-${start}-a-${end}.xlsx`;
     }
     if (mode === "supplier") return `Faturas-${safeFilename($("#export-supplier").selectedOptions[0]?.textContent || "Fornecedor")}.xlsx`;
-    if (mode === "selected") return `Faturas-Selecionadas-${today}.xlsx`;
     return `Faturas-Todas-${today}.xlsx`;
   }
 
