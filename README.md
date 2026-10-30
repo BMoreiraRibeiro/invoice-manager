@@ -18,7 +18,7 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 - Caminhos relativos, compatíveis com publicação em subdiretório do GitHub Pages.
 
 ## Ainda não implementado
-O OCR e a leitura QR preenchem os campos que conseguirem reconhecer, mas devem ser sempre revistos manualmente. O número aceita os tipos de documento mais comuns (`FT`, `FR`, `FS`, `NC`, `ND` e `RC`) e séries alfanuméricas, por exemplo `FR A/123`. O QR fiscal normalmente transporta NIF do emitente, data, tipo/número do documento, ATCUD, bases/IVA e total; o nome do fornecedor pode continuar a exigir OCR ou confirmação. Na primeira utilização é necessária ligação à Internet para descarregar os motores; fotografias com pouco contraste, papel dobrado ou QR pequeno podem exigir uma nova fotografia mais próxima.
+O OCR e a leitura QR preenchem os campos que conseguirem reconhecer, mas devem ser sempre revistos manualmente. O número aceita os tipos de documento mais comuns (`FT`, `FR`, `FS`, `NC`, `ND` e `RC`) e séries alfanuméricas, por exemplo `FR A/123`. O QR fiscal normalmente transporta NIF do emitente, data, tipo/número do documento, ATCUD, bases/IVA e total; o nome do fornecedor pode continuar a exigir OCR ou confirmação. Dashboard, histórico, captura, zoom, armazenamento e exportação funcionam offline depois de a PWA ser preparada. A leitura QR e o OCR ainda precisam de Internet na primeira utilização para carregar as bibliotecas CDN; depois podem funcionar offline se o navegador mantiver esses recursos em cache. Fotografias com pouco contraste, papel dobrado ou QR pequeno podem exigir uma nova fotografia mais próxima.
 
 ## Testar localmente
 O Service Worker exige HTTPS ou localhost. Na pasta do projeto, executar por exemplo:
