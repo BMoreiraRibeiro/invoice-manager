@@ -440,7 +440,17 @@
 
   const themeButton = $("#theme-toggle"); const savedTheme = localStorage.getItem("invoice-theme"); if (savedTheme === "dark") document.documentElement.dataset.theme = "dark";
   themeButton?.addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; if (next === "dark") document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme; localStorage.setItem("invoice-theme", next); });
-  if ("serviceWorker" in navigator && location.protocol !== "file:") window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(console.error));
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    // Quando uma nova versão assume o controlo, recarrega uma vez (se não houver dados a meio no formulário).
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded || ocrInProgress || $("#invoice-supplier").value || $("#invoice-total").value) return;
+      reloaded = true;
+      location.reload();
+    });
+    window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(console.error));
+  }
   const initialPage = location.hash.replace("#", ""); showPage(pages.includes(initialPage) ? initialPage : "dashboard");
   refresh().catch(error => { console.error(error); $("#storage-note").textContent = "Não foi possível abrir o armazenamento local"; });
 })();
