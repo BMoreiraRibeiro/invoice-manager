@@ -47,12 +47,6 @@
           <article class="stat-card"><div class="stat-label">Total de IVA <span>%</span></div><div class="stat-value" id="stat-vat">0,00 €</div><div class="stat-foot">Imposto registado</div></article>
           <article class="stat-card"><div class="stat-label">Este mês <span>◷</span></div><div class="stat-value" id="stat-month">0</div><div class="stat-foot">Faturas no mês atual</div></article>
         </div>
-        <div class="section-heading"><div><h2>Atividade recente</h2><p class="muted">As faturas mais recentes aparecerão aqui.</p></div><button class="text-button" data-page="history">Ver histórico →</button></div>
-        <div class="empty-state">
-          <div class="empty-icon">▤</div><h3>Ainda não existem faturas</h3>
-          <p>Quando começares a registar faturas, encontrarás aqui um resumo da tua atividade.</p>
-          <button class="secondary-button" data-page="capture">Registar primeira fatura</button>
-        </div>
       </section>
 
       <section class="page" id="page-capture">
@@ -83,7 +77,7 @@
         <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe os registos</h2><p class="muted">Os filtros não alteram o histórico.</p></div></div><label>Modalidade<select id="export-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option></select></label><div class="form-grid export-filters"><label id="export-start-wrap">Data inicial<input id="export-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="export-end-wrap">Data final<input id="export-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="export-supplier-wrap">Fornecedor<select id="export-supplier"><option value="">Escolher fornecedor</option></select></label></div><div class="export-summary" id="export-summary">0 faturas · 0,00 €</div><button class="primary-button" id="export-button" type="button"><span>⇩</span> Gerar ficheiro Excel</button></div></div>
       </section>
 
-      <footer class="app-footer"><span>Faturas · Versão 0.5.5</span><span id="storage-note">Armazenamento local ativo</span></footer>
+      <footer class="app-footer"><span>Faturas · Versão 0.5.6</span><span id="storage-note">Armazenamento local ativo</span></footer>
     </main>
   </div>
 
@@ -95,6 +89,6 @@
   </nav>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" crossorigin="anonymous"></script>
-  <script src="./js/app.js?v=0.5.5"></script>
+  <script src="./js/app.js?v=0.5.6"></script>
 </body>
 </html>

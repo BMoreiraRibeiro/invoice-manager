@@ -74,13 +74,6 @@
     $("#stat-total").textContent = money(total);
     $("#stat-vat").textContent = money(vat);
     $("#stat-month").textContent = invoices.filter(invoice => invoice.date.startsWith(month)).length;
-    const empty = $("#page-dashboard .empty-state");
-    if (invoices.length) {
-      empty.innerHTML = `<div class="recent-list">${invoices.slice(0, 5).map(invoice => `<div class="recent-row"><span><strong>${escapeXml(invoice.supplier)}</strong><small>${escapeXml(displayDate(invoice.date))} · ${escapeXml(invoice.number || "Sem número")}</small></span><strong>${money(invoice.total)}</strong></div>`).join("")}</div>`;
-    } else {
-      empty.innerHTML = '<div class="empty-icon">▤</div><h3>Ainda não existem faturas</h3><p>Quando começares a registar faturas, encontrarás aqui um resumo da tua atividade.</p><button class="secondary-button" data-page="capture">Registar primeira fatura</button>';
-      empty.querySelector("[data-page]").addEventListener("click", () => showPage("capture"));
-    }
   }
 
   function renderHistory() {
@@ -351,6 +344,11 @@
   function validateInvoice(invoice) {
     if (!invoice.date || !invoice.supplier || !invoice.total) return "Preenche a data, o fornecedor e o total.";
     if (invoice.number && !documentNumberPattern.test(invoice.number)) return "O número deve começar por FT, FR, FS, NC, ND ou RC e conter algarismos.";
+    if (invoice.number) {
+      const numberKey = value => String(value || "").replace(/\s+/g, "").toUpperCase();
+      const duplicate = invoices.find(item => item.id !== invoice.id && numberKey(item.number) === numberKey(invoice.number));
+      if (duplicate) return `Já existe uma fatura com o número ${duplicate.number} (${duplicate.supplier}, ${displayDate(duplicate.date)}).`;
+    }
     if (invoice.vatNumber && !/^\d{9}$/.test(invoice.vatNumber)) return "O NIF deve ter 9 algarismos.";
     if (invoice.subtotal && invoice.vat && Math.abs(invoice.subtotal + invoice.vat - invoice.total) > 0.03) return "A base tributável + IVA não coincide com o total.";
     return "";
