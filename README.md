@@ -8,9 +8,10 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 - Recorte automático aproximado do papel e OCR local no browser com Tesseract.js em português.
 - Leitura dedicada do QR fiscal português, com preenchimento prioritário dos campos estruturados e OCR como complemento.
 - Formulário de validação manual com validação de NIF e coerência de valores.
+- NIF próprio (do cliente) e observações em cada fatura. O NIF próprio é lido do código QR (campo B do adquirente) ou, na leitura por imagem, do texto junto a "Cliente", "Adquirente" ou "Exmo(s) Sr(s)"; "consumidor final" (999999990) é ignorado.
 - Persistência local em IndexedDB, dashboard com totais e histórico pesquisável.
 - Edição e eliminação de faturas com confirmação.
-- Exportação offline para XLSX com todos os registos, intervalo de datas, fornecedor ou seleção individual.
+- Exportação offline para XLSX com todos os registos, intervalo de datas, fornecedor, NIF próprio ou seleção individual. O ficheiro inclui as colunas NIF próprio e Observações.
 - Tema claro/escuro.
 - Indicador de ligação.
 - Manifest PWA e ícones.

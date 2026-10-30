@@ -2,6 +2,7 @@
   "use strict";
 
   const pages = ["dashboard", "capture", "history", "export"];
+  const NO_NIF = "999999990"; // "consumidor final": fatura sem NIF do cliente
   const database = { name: "invoice-manager", version: 1, store: "invoices" };
   let invoices = [];
   let selectedImage = null;
@@ -18,7 +19,7 @@
   const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
   const normalizeInvoiceNumber = value => String(value || "").toUpperCase().replace(/[^A-Z0-9./ -]/g, "").replace(/\s+/g, " ").trim();
   const documentNumberPattern = /^(FT|FR|FS|NC|ND|RC)\s*[A-Z0-9./ -]*\d[A-Z0-9./ -]*$/i;
-  const escapeXml = value => String(value ?? "").replace(/[<>&'\"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char]));
+  const escapeXml = value => String(value ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[<>&'\"]/g,char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char]));
 
   function openDatabase() {
     return new Promise((resolve, reject) => {
@@ -78,13 +79,13 @@
 
   function renderHistory() {
     const query = normalizeSearch($("#history-search").value);
-    const visible = invoices.filter(invoice => [invoice.supplier, invoice.vatNumber, invoice.number, displayDate(invoice.date)].some(value => normalizeSearch(value).includes(query)));
+    const visible = invoices.filter(invoice => [invoice.supplier, invoice.vatNumber, invoice.ownVatNumber, invoice.number, invoice.notes, displayDate(invoice.date)].some(value => normalizeSearch(value).includes(query)));
     const list = $("#history-list");
     if (!visible.length) {
       list.innerHTML = '<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>As faturas guardadas aparecerão aqui.</p></div>';
       return;
     }
-    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong></div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions history-actions"><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar" aria-label="Editar fatura">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar" aria-label="Eliminar fatura">×</button></div></article>`).join("");
+    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong>${invoice.notes ? `<small class="invoice-notes">${escapeXml(invoice.notes)}</small>` : ""}</div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions history-actions"><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar" aria-label="Editar fatura">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar" aria-label="Eliminar fatura">×</button></div></article>`).join("");
     list.querySelectorAll("[data-edit-invoice]").forEach(button => button.addEventListener("click", () => editInvoice(button.dataset.editInvoice)));
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
@@ -169,6 +170,8 @@
     $("#invoice-date").value = invoice?.date || new Date().toISOString().slice(0, 10);
     $("#invoice-supplier").value = invoice?.supplier || "";
     $("#invoice-vat-number").value = invoice?.vatNumber || "";
+    $("#invoice-own-vat-number").value = invoice?.ownVatNumber || "";
+    $("#invoice-notes").value = invoice?.notes || "";
     $("#invoice-subtotal").value = invoice ? String(invoice.subtotal).replace(".", ",") : "";
     $("#invoice-vat").value = invoice ? String(invoice.vat).replace(".", ",") : "";
     $("#invoice-total").value = invoice ? String(invoice.total).replace(".", ",") : "";
@@ -237,14 +240,60 @@
     return matches?.map(parseMoney).filter(value => value > 0) || [];
   }
 
-  function parseOcrText(text) {
+  // Dígito de controlo do NIF português (módulo 11). Serve para preferir leituras de OCR coerentes.
+  function nifChecksumOk(nif) {
+    if (!/^\d{9}$/.test(nif)) return false;
+    const sum = [...nif.slice(0, 8)].reduce((total, digit, index) => total + Number(digit) * (9 - index), 0);
+    const check = 11 - (sum % 11);
+    return Number(nif[8]) === (check >= 10 ? 0 : check);
+  }
+
+  // Procura NIFs no texto do OCR e separa o do fornecedor (emitente) do do cliente (o NIF próprio).
+  // O cliente reconhece-se por palavras como "Cliente", "Adquirente" ou "Exmo(s) Sr(s)" na mesma linha ou na linha anterior.
+  function extractNifs(text, knownSupplierNif = "") {
+    const pattern = /(NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/gi;
+    const customerHint = /CLIENTE|ADQUIRENTE|EXM[OA]|DESTINAT|COMPRADOR|FATURADO A|FACTURADO A/i;
+    const supplierHint = /EMITENTE|FORNECEDOR|VENDEDOR/i;
+    const candidates = [];
+    let match;
+    while ((match = pattern.exec(text))) {
+      const nif = match[2].replace(/\D/g, "");
+      if (nif === NO_NIF) continue;
+      const lineStart = text.lastIndexOf("\n", match.index) + 1;
+      const sameLine = text.slice(lineStart, match.index + match[0].length);
+      let role = "unknown";
+      if (customerHint.test(sameLine)) role = "customer";
+      else if (supplierHint.test(sameLine)) role = "supplier";
+      else {
+        // Olha até 3 linhas para trás (ex.: "Exmo(s) Sr(s)" / nome / NIF), parando noutro NIF ou numa palavra de emitente.
+        for (const earlier of text.slice(0, lineStart).replace(/\n$/, "").split("\n").slice(-3).reverse()) {
+          if (/(NIF|CONTRIB)\D{0,15}\d/i.test(earlier) || supplierHint.test(earlier)) break;
+          if (customerHint.test(earlier)) { role = "customer"; break; }
+        }
+      }
+      const valid = nifChecksumOk(nif);
+      // Com o NIF do fornecedor já conhecido (QR), um NIF válido e diferente é, muito provavelmente, o do cliente.
+      if (knownSupplierNif) {
+        if (nif === knownSupplierNif) role = "supplier";
+        else if (role === "unknown" && valid) role = "customer";
+      }
+      candidates.push({ nif, role, valid });
+    }
+    const pick = list => (list.find(item => item.valid) || list[0])?.nif;
+    const supplierNif = pick(candidates.filter(item => item.role !== "customer"));
+    const ownNif = pick(candidates.filter(item => item.role === "customer" && item.nif !== (supplierNif || knownSupplierNif)));
+    return { vatNumber: supplierNif, ownVatNumber: ownNif };
+  }
+
+  function parseOcrText(text, known = {}) {
     const lines = text.split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
     const upper = lines.map(line => line.toLocaleUpperCase("pt-PT"));
     const result = {};
     const dateMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b/);
     if (dateMatch) result.date = `${dateMatch[3]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[1].padStart(2, "0")}`;
-    const nifMatch = text.match(/(?:NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/i);
-    if (nifMatch) result.vatNumber = nifMatch[1].replace(/\D/g, "");
+    const nifs = extractNifs(text, known.vatNumber || "");
+    if (nifs.vatNumber) result.vatNumber = nifs.vatNumber;
+    if (nifs.ownVatNumber) result.ownVatNumber = nifs.ownVatNumber;
     const numberMatch = text.match(/\b(FT|FR|FS|NC|ND|RC)\s*[:#./-]?\s*([A-Z0-9][A-Z0-9 ./-]*\d[A-Z0-9 ./-]*)\b/i);
     if (numberMatch) result.number = `${numberMatch[1].toUpperCase()} ${numberMatch[2]}`.replace(/\s+/g, " ").trim();
     const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
@@ -266,6 +315,9 @@
     });
     const result = {};
     if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
+    // B = NIF do adquirente (o NIF próprio). 999999990 é "consumidor final": a fatura foi emitida sem NIF.
+    const buyer = String(fields.B || "").replace(/\s/g, "").replace(/^PT/i, "");
+    if (/^\d{9}$/.test(buyer) && buyer !== NO_NIF && buyer !== result.vatNumber) result.ownVatNumber = buyer;
     if (fields.F) {
       const date = fields.F.match(/^(\d{4})(\d{2})(\d{2})$/) || fields.F.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/);
       if (date) result.date = `${date[1]}-${date[2]}-${date[3]}`;
@@ -311,7 +363,7 @@
   }
 
   function applyOcrFields(fields, lockedFields = {}) {
-    const ids = { number: "invoice-number", date: "invoice-date", supplier: "invoice-supplier", vatNumber: "invoice-vat-number", subtotal: "invoice-subtotal", vat: "invoice-vat", total: "invoice-total" };
+    const ids = { number: "invoice-number", date: "invoice-date", supplier: "invoice-supplier", vatNumber: "invoice-vat-number", ownVatNumber: "invoice-own-vat-number", subtotal: "invoice-subtotal", vat: "invoice-vat", total: "invoice-total" };
     for (const [field, value] of Object.entries(fields)) if (value && ids[field] && !lockedFields[field]) $(`#${ids[field]}`).value = typeof value === "number" ? String(value).replace(".", ",") : value;
     const found = Object.keys({ ...fields, ...lockedFields }).filter(field => fields[field] || lockedFields[field]).length;
     setOcrStatus(found ? `Reconhecimento concluído: ${found} campo${found === 1 ? "" : "s"} preenchido${found === 1 ? "" : "s"}. Confirma e corrige os dados.` : "Não foi possível reconhecer campos com confiança. Preenche-os manualmente.", found ? "success" : "");
@@ -333,7 +385,7 @@
       const worker = await window.Tesseract.createWorker("por", 1, { logger: message => { if (message.status === "recognizing text") setOcrStatus(`A reconhecer o texto… ${Math.round((message.progress || 0) * 100)}%`); } });
       const result = await worker.recognize(selectedImage);
       await worker.terminate();
-      applyOcrFields(parseOcrText(result.data.text), qrFields);
+      applyOcrFields(parseOcrText(result.data.text, qrFields), qrFields);
     } catch (error) {
       console.error("OCR da fatura falhou:", error);
       setOcrStatus(error.message || "Não foi possível ler a imagem. Preenche os dados manualmente.", "error");
@@ -400,7 +452,7 @@
   }
 
   function formInvoice() {
-    return { id: $("#invoice-id").value || crypto.randomUUID(), number: normalizeInvoiceNumber($("#invoice-number").value), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
+    return { id: $("#invoice-id").value || crypto.randomUUID(), number: normalizeInvoiceNumber($("#invoice-number").value), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), ownVatNumber: $("#invoice-own-vat-number").value.replace(/[\s.-]/g, ""), notes: $("#invoice-notes").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
   }
 
   function validateInvoice(invoice) {
@@ -415,6 +467,7 @@
       if (duplicate) return `Já existe uma fatura com o número ${duplicate.number} (${duplicate.supplier}, ${displayDate(duplicate.date)}).`;
     }
     if (invoice.vatNumber && !/^\d{9}$/.test(invoice.vatNumber)) return "O NIF deve ter 9 algarismos.";
+    if (invoice.ownVatNumber && !/^\d{9}$/.test(invoice.ownVatNumber)) return "O NIF próprio deve ter 9 algarismos.";
     if (invoice.subtotal && invoice.vat && Math.abs(invoice.subtotal + invoice.vat - invoice.total) > 0.03) return "A base tributável + IVA não coincide com o total.";
     return "";
   }
@@ -424,11 +477,19 @@
     $("#export-start-wrap").classList.toggle("hidden", mode !== "dates");
     $("#export-end-wrap").classList.toggle("hidden", mode !== "dates");
     $("#export-supplier-wrap").classList.toggle("hidden", mode !== "supplier");
+    $("#export-own-wrap").classList.toggle("hidden", mode !== "own");
     const suppliers = [...new Map(invoices.map(invoice => [invoice.vatNumber || invoice.supplier, invoice])).values()];
     const supplierSelect = $("#export-supplier");
     const chosenSupplier = supplierSelect.value; // a lista é reconstruída; manter a escolha do utilizador
     supplierSelect.innerHTML = '<option value="">Escolher fornecedor</option>' + suppliers.map(invoice => `<option value="${escapeXml(invoice.vatNumber || invoice.supplier)}">${escapeXml(invoice.supplier)}${invoice.vatNumber ? ` · ${escapeXml(invoice.vatNumber)}` : ""}</option>`).join("");
     supplierSelect.value = chosenSupplier;
+    // NIFs próprios existentes (com o número de faturas de cada um); mantém a escolha ao reconstruir a lista.
+    const ownCounts = new Map();
+    invoices.forEach(invoice => { if (invoice.ownVatNumber) ownCounts.set(invoice.ownVatNumber, (ownCounts.get(invoice.ownVatNumber) || 0) + 1); });
+    const ownSelect = $("#export-own");
+    const chosenOwn = ownSelect.value;
+    ownSelect.innerHTML = '<option value="">Escolher NIF próprio</option>' + [...ownCounts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([nif, count]) => `<option value="${escapeXml(nif)}">${escapeXml(nif)} · ${count} fatura${count === 1 ? "" : "s"}</option>`).join("");
+    ownSelect.value = chosenOwn;
     const selected = currentExportInvoices();
     $("#export-count").textContent = selected.length;
     $("#export-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
@@ -438,6 +499,7 @@
     const mode = $("#export-mode").value;
     if (mode === "dates") return invoices.filter(invoice => (!$("#export-start").value || invoice.date >= inputDate($("#export-start").value)) && (!$("#export-end").value || invoice.date <= inputDate($("#export-end").value)));
     if (mode === "supplier") { const key = $("#export-supplier").value; return key ? invoices.filter(invoice => (invoice.vatNumber || invoice.supplier) === key) : []; }
+    if (mode === "own") { const key = $("#export-own").value; return key ? invoices.filter(invoice => invoice.ownVatNumber === key) : []; }
     return invoices;
   }
 
@@ -454,6 +516,7 @@
       return `Faturas-${start}-a-${end}.xlsx`;
     }
     if (mode === "supplier") return `Faturas-${safeFilename($("#export-supplier").selectedOptions[0]?.textContent || "Fornecedor")}.xlsx`;
+    if (mode === "own") return `Faturas-NIF-${safeFilename($("#export-own").value || "proprio")}.xlsx`;
     return `Faturas-Todas-${today}.xlsx`;
   }
 
@@ -474,10 +537,11 @@
   function exportXlsx() {
     const rows = currentExportInvoices();
     if (!rows.length) return alert("Não existem faturas para exportar com estes critérios.");
-    const header = ["Número da fatura", "Data", "Fornecedor", "NIF", "Base tributável", "IVA", "Total"];
-    const values = [header, ...rows.map(invoice => [invoice.number, displayDate(invoice.date), invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2)]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
+    // As colunas novas (NIF próprio e Observações) ficam no fim, para não mudar a posição das que já existiam.
+    const header = ["Número da fatura", "Data", "Fornecedor", "NIF", "Base tributável", "IVA", "Total", "NIF próprio", "Observações"];
+    const values = [header, ...rows.map(invoice => [invoice.number, displayDate(invoice.date), invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2), invoice.ownVatNumber || "", invoice.notes || ""]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
     const sheetRows = values.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, cellIndex) => `<c r="${String.fromCharCode(65 + cellIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`).join("")}</row>`).join("");
-    const files = [{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' }, { name: "_rels/.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' }, { name: "xl/workbook.xml", data: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Faturas" sheetId="1" r:id="rId1"/></sheets></workbook>' }, { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' }, { name: "xl/worksheets/sheet1.xml", data: `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:G${values.length - 1}"/></worksheet>` }];
+    const files = [{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' }, { name: "_rels/.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' }, { name: "xl/workbook.xml", data: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Faturas" sheetId="1" r:id="rId1"/></sheets></workbook>' }, { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' }, { name: "xl/worksheets/sheet1.xml", data: `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:I${values.length - 1}"/></worksheet>` }];
     const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
@@ -519,7 +583,7 @@
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
-  ["#export-mode", "#export-start", "#export-end", "#export-supplier"].forEach(selector => $(selector).addEventListener("change", updateExport));
+  ["#export-mode", "#export-start", "#export-end", "#export-supplier", "#export-own"].forEach(selector => $(selector).addEventListener("change", updateExport));
   // Datas da exportação: coloca as barras automaticamente (dd/mm/aaaa) à medida que se escreve.
   const formatDateTyping = (value, deleting) => {
     const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
