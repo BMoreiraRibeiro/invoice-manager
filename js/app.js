@@ -174,7 +174,7 @@
     if (numberMatch) result.number = numberMatch[1];
     const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
     const vatIndex = upper.findIndex(line => /\bIVA\b|IMPOSTO/.test(line));
-    const subtotalIndex = upper.findIndex(line => /BASE tribut|SUBTOTAL|INCIDÊNCIA/.test(line));
+    const subtotalIndex = upper.findIndex(line => /BASE TRIBUT|SUBTOTAL|INCIDÊNCIA/.test(line));
     if (totalIndex >= 0) result.total = findMoney(lines[totalIndex])[0] || findMoney(lines[Math.min(totalIndex + 1, lines.length - 1)])[0] || 0;
     if (vatIndex >= 0) result.vat = findMoney(lines[vatIndex])[0] || findMoney(lines[Math.min(vatIndex + 1, lines.length - 1)])[0] || 0;
     if (subtotalIndex >= 0) result.subtotal = findMoney(lines[subtotalIndex])[0] || findMoney(lines[Math.min(subtotalIndex + 1, lines.length - 1)])[0] || 0;

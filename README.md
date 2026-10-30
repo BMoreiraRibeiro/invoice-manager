@@ -5,6 +5,7 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 ## Incluído nesta fase
 - Interface responsiva com navegação entre Dashboard, Nova fatura, Histórico e Exportação.
 - Captura através da câmara ou importação de imagem, com pré-visualização local.
+- Recorte automático aproximado do papel e OCR local no browser com Tesseract.js em português.
 - Formulário de validação manual com validação de NIF e coerência de valores.
 - Persistência local em IndexedDB, dashboard com totais e histórico pesquisável.
 - Edição e eliminação de faturas com confirmação.
@@ -16,7 +17,7 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 - Caminhos relativos, compatíveis com publicação em subdiretório do GitHub Pages.
 
 ## Ainda não implementado
-O OCR local em português e a interpretação automática dos campos ainda não estão integrados. A imagem pode ser guardada com a fatura, mas os campos devem ser confirmados manualmente.
+O OCR preenche os campos que conseguir reconhecer, mas deve ser sempre revisto manualmente. Na primeira utilização é necessária ligação à Internet para descarregar o motor e o idioma português do Tesseract.js; depois o navegador pode reutilizar esses recursos conforme a sua cache. Fotografias com pouco contraste, papel dobrado ou fundos muito claros podem exigir recorte/correção manual.
 
 ## Testar localmente
 O Service Worker exige HTTPS ou localhost. Na pasta do projeto, executar por exemplo:
