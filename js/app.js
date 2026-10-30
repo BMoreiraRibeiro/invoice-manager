@@ -346,7 +346,10 @@
     if (invoice.number && !documentNumberPattern.test(invoice.number)) return "O número deve começar por FT, FR, FS, NC, ND ou RC e conter algarismos.";
     if (invoice.number) {
       const numberKey = value => String(value || "").replace(/\s+/g, "").toUpperCase();
-      const duplicate = invoices.find(item => item.id !== invoice.id && numberKey(item.number) === numberKey(invoice.number));
+      // Ao editar uma fatura que mantém o número, não bloquear (pode já haver repetidas de antes da validação).
+      const stored = invoices.find(item => item.id === invoice.id);
+      const numberChanged = !stored || numberKey(stored.number) !== numberKey(invoice.number);
+      const duplicate = numberChanged && invoices.find(item => item.id !== invoice.id && numberKey(item.number) === numberKey(invoice.number));
       if (duplicate) return `Já existe uma fatura com o número ${duplicate.number} (${duplicate.supplier}, ${displayDate(duplicate.date)}).`;
     }
     if (invoice.vatNumber && !/^\d{9}$/.test(invoice.vatNumber)) return "O NIF deve ter 9 algarismos.";
