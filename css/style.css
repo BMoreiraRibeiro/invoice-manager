@@ -15,12 +15,12 @@
 .invoice-row{padding:14px 0;border-bottom:1px solid var(--line)}.invoice-row:last-child{border-bottom:0}
 
 /* Exportação: resumo no topo e seletores maiores */
-.export-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%;max-width:760px;margin:0 0 18px}
-.export-summary-item{display:grid;gap:6px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
-.export-summary-item span{color:var(--muted);font-size:13px;font-weight:600}
-.export-summary-item strong{font-size:26px;line-height:1.15;overflow-wrap:anywhere}
+.export-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%;max-width:760px;margin:0 0 14px}
+.export-summary-item{display:grid;gap:2px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.export-summary-item span{color:var(--muted);font-size:12px;font-weight:600}
+.export-summary-item strong{font-size:17px;line-height:1.2;overflow-wrap:anywhere}
 .export-panel .form-panel>label,.export-panel .export-filters>label{display:grid;gap:8px;font-size:14px;font-weight:600}
 .export-panel .form-panel>label{margin-bottom:15px}
 .export-panel .form-panel select,.export-panel .form-panel input{display:block;width:100%;min-width:0;height:56px;padding:14px 16px;font:inherit;font-size:17px;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .export-panel .form-panel select:focus,.export-panel .form-panel input:focus{outline:2px solid var(--accent);outline-offset:1px}
-.export-panel #export-button{min-height:56px;font-size:16px}
+.export-panel #export-button{min-height:56px;margin-top:28px;font-size:16px}

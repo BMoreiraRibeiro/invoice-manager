@@ -363,7 +363,10 @@
     $("#export-end-wrap").classList.toggle("hidden", mode !== "dates");
     $("#export-supplier-wrap").classList.toggle("hidden", mode !== "supplier");
     const suppliers = [...new Map(invoices.map(invoice => [invoice.vatNumber || invoice.supplier, invoice])).values()];
-    $("#export-supplier").innerHTML = '<option value="">Escolher fornecedor</option>' + suppliers.map(invoice => `<option value="${escapeXml(invoice.vatNumber || invoice.supplier)}">${escapeXml(invoice.supplier)}${invoice.vatNumber ? ` · ${escapeXml(invoice.vatNumber)}` : ""}</option>`).join("");
+    const supplierSelect = $("#export-supplier");
+    const chosenSupplier = supplierSelect.value; // a lista é reconstruída; manter a escolha do utilizador
+    supplierSelect.innerHTML = '<option value="">Escolher fornecedor</option>' + suppliers.map(invoice => `<option value="${escapeXml(invoice.vatNumber || invoice.supplier)}">${escapeXml(invoice.supplier)}${invoice.vatNumber ? ` · ${escapeXml(invoice.vatNumber)}` : ""}</option>`).join("");
+    supplierSelect.value = chosenSupplier;
     const selected = currentExportInvoices();
     $("#export-count").textContent = selected.length;
     $("#export-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
