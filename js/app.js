@@ -6,10 +6,12 @@
   let invoices = [];
   let selectedImage = null;
   let ocrInProgress = false;
+  let previewZoom = 1;
 
   const $ = selector => document.querySelector(selector);
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
   const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
+  const normalizeInvoiceNumber = value => String(value || "").replace(/\D/g, "");
   const escapeXml = value => String(value ?? "").replace(/[<>&'\"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char]));
 
   function openDatabase() {
@@ -170,8 +172,8 @@
     if (dateMatch) result.date = `${dateMatch[3]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[1].padStart(2, "0")}`;
     const nifMatch = text.match(/(?:NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/i);
     if (nifMatch) result.vatNumber = nifMatch[1].replace(/\D/g, "");
-    const numberMatch = text.match(/\b(FT)[ -:/]*([A-Z0-9][A-Z0-9./-]{2,})\b/i);
-    if (numberMatch) result.number = `FT ${numberMatch[2]}`;
+    const numberMatch = text.match(/\bFT\s*[:#./-]?\s*([0-9][0-9 ./-]*)/i);
+    if (numberMatch) result.number = numberMatch[1].replace(/\D/g, "");
     const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
     const vatIndex = upper.findIndex(line => /\bIVA\b|IMPOSTO/.test(line));
     const subtotalIndex = upper.findIndex(line => /BASE TRIBUT|SUBTOTAL|INCIDÊNCIA/.test(line));
@@ -192,7 +194,8 @@
     const result = {};
     if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
     if (fields.F && /^\d{4}-\d{2}-\d{2}$/.test(fields.F)) result.date = fields.F;
-    if (fields.G) result.number = /^FT\b/i.test(fields.G) ? fields.G : `FT ${fields.G}`;
+    const qrNumber = fields.G?.match(/\bFT\s*[:#./-]?\s*([0-9][0-9 ./-]*)/i);
+    if (qrNumber) result.number = qrNumber[1].replace(/\D/g, "");
     const total = fields.R;
     if (total) result.total = parseMoney(total);
     if (fields.Q) result.vat = parseMoney(fields.Q);
@@ -269,6 +272,11 @@
     processImage(file);
   }
 
+  function setPreviewZoom(value) {
+    previewZoom = Math.min(3, Math.max(1, value));
+    $("#image-preview").style.transform = `scale(${previewZoom})`;
+  }
+
   async function readQrFile(file) {
     if (!file || ocrInProgress) return;
     ocrInProgress = true;
@@ -283,7 +291,7 @@
   }
 
   function formInvoice() {
-    return { id: $("#invoice-id").value || crypto.randomUUID(), number: $("#invoice-number").value.trim(), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
+    return { id: $("#invoice-id").value || crypto.randomUUID(), number: normalizeInvoiceNumber($("#invoice-number").value), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
   }
 
   function validateInvoice(invoice) {
@@ -342,7 +350,11 @@
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
   $("#invoice-image").addEventListener("change", event => readFile(event.target.files[0]));
   $("#invoice-qr").addEventListener("change", event => readQrFile(event.target.files[0]));
-  $("#remove-image").addEventListener("click", () => { selectedImage = null; $("#image-preview").removeAttribute("src"); $("#image-preview-wrap").classList.add("hidden"); });
+  $("#zoom-out").addEventListener("click", () => setPreviewZoom(previewZoom - 0.25));
+  $("#zoom-reset").addEventListener("click", () => setPreviewZoom(1));
+  $("#zoom-in").addEventListener("click", () => setPreviewZoom(previewZoom + 0.25));
+  $("#invoice-number").addEventListener("input", event => { event.target.value = event.target.value.replace(/\D/g, ""); });
+  $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; $("#image-preview").removeAttribute("src"); $("#image-preview").style.transform = "scale(1)"; $("#image-preview-wrap").classList.add("hidden"); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
