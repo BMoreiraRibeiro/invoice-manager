@@ -365,7 +365,8 @@
     const suppliers = [...new Map(invoices.map(invoice => [invoice.vatNumber || invoice.supplier, invoice])).values()];
     $("#export-supplier").innerHTML = '<option value="">Escolher fornecedor</option>' + suppliers.map(invoice => `<option value="${escapeXml(invoice.vatNumber || invoice.supplier)}">${escapeXml(invoice.supplier)}${invoice.vatNumber ? ` · ${escapeXml(invoice.vatNumber)}` : ""}</option>`).join("");
     const selected = currentExportInvoices();
-    $("#export-summary").textContent = `${selected.length} fatura${selected.length === 1 ? "" : "s"} · ${money(selected.reduce((sum, invoice) => sum + invoice.total, 0))}`;
+    $("#export-count").textContent = selected.length;
+    $("#export-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
   }
 
   function currentExportInvoices() {
