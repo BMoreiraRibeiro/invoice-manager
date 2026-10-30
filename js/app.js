@@ -170,8 +170,8 @@
     if (dateMatch) result.date = `${dateMatch[3]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[1].padStart(2, "0")}`;
     const nifMatch = text.match(/(?:NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/i);
     if (nifMatch) result.vatNumber = nifMatch[1].replace(/\D/g, "");
-    const numberMatch = text.match(/\b(?:FT|FA|FR|NC|FATURA)[ -:/]*([A-Z0-9][A-Z0-9./-]{2,})\b/i);
-    if (numberMatch) result.number = numberMatch[1];
+    const numberMatch = text.match(/\b(FT)[ -:/]*([A-Z0-9][A-Z0-9./-]{2,})\b/i);
+    if (numberMatch) result.number = `FT ${numberMatch[2]}`;
     const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
     const vatIndex = upper.findIndex(line => /\bIVA\b|IMPOSTO/.test(line));
     const subtotalIndex = upper.findIndex(line => /BASE TRIBUT|SUBTOTAL|INCIDÊNCIA/.test(line));
@@ -181,6 +181,56 @@
     const supplier = lines.slice(0, Math.max(1, Math.min(5, lines.length))).find(line => !/FATURA|RECIBO|NIF|CONTRIB|TOTAL|IVA|DATA|TAXA|PÁGINA/i.test(line) && /[A-Za-zÀ-ÿ]{3}/.test(line));
     if (supplier) result.supplier = supplier;
     return result;
+  }
+
+  function parseQrPayload(payload) {
+    const fields = {};
+    String(payload).split(/[\n;*]/).map(part => part.trim()).forEach(part => {
+      const match = part.match(/^([A-Z])\s*[:=]\s*(.+)$/i);
+      if (match) fields[match[1].toUpperCase()] = match[2].trim();
+    });
+    const result = {};
+    if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
+    if (fields.F && /^\d{4}-\d{2}-\d{2}$/.test(fields.F)) result.date = fields.F;
+    if (fields.G) result.number = /^FT\b/i.test(fields.G) ? fields.G : `FT ${fields.G}`;
+    const total = fields.Q || fields.O || fields.N;
+    if (total) result.total = parseMoney(total);
+    if (fields.P) result.vat = parseMoney(fields.P);
+    const bases = [fields.J, fields.L, fields.N].map(parseMoney).filter(value => value > 0);
+    if (bases.length) result.subtotal = bases.reduce((sum, value) => sum + value, 0);
+    return { fields: result, raw: payload };
+  }
+
+  async function readQr(file) {
+    const image = await loadImage(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    if ("BarcodeDetector" in window) {
+      try {
+        const detector = new BarcodeDetector({ formats: ["qr_code"] });
+        const codes = await detector.detect(canvas);
+        if (codes[0]?.rawValue) return parseQrPayload(codes[0].rawValue);
+      } catch (error) {
+        console.warn("BarcodeDetector indisponível:", error);
+      }
+    }
+    if (window.jsQR) {
+      const code = window.jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "attemptBoth" });
+      if (code?.data) return parseQrPayload(code.data);
+    }
+    return null;
+  }
+
+  async function tryQr(file) {
+    setOcrStatus("A procurar o código QR…");
+    const qr = await readQr(file);
+    if (!qr) return false;
+    applyOcrFields(qr.fields);
+    setOcrStatus(`Código QR lido: ${Object.keys(qr.fields).length} campo${Object.keys(qr.fields).length === 1 ? "" : "s"}. Confirma e completa o fornecedor.`, "success");
+    return true;
   }
 
   function applyOcrFields(fields) {
@@ -193,13 +243,15 @@
   async function processImage(file) {
     if (!file || ocrInProgress) return;
     ocrInProgress = true;
-    setOcrStatus("A preparar e recortar a imagem…");
+    setOcrStatus("A procurar dados fiscais no código QR…");
     try {
+      let qrFound = false;
+      try { qrFound = await tryQr(file); } catch (error) { console.warn("Leitura QR falhou:", error); }
       selectedImage = await cropDocument(file);
       $("#image-preview").src = URL.createObjectURL(selectedImage);
       $("#image-preview-wrap").classList.remove("hidden");
       if (!window.Tesseract) throw new Error("OCR indisponível: abre a aplicação com ligação à Internet uma vez para carregar o motor.");
-      setOcrStatus("A reconhecer o texto da fatura…");
+      setOcrStatus(qrFound ? "QR lido. A procurar o fornecedor no texto…" : "A reconhecer o texto da fatura…");
       const worker = await window.Tesseract.createWorker("por", 1, { logger: message => { if (message.status === "recognizing text") setOcrStatus(`A reconhecer o texto… ${Math.round((message.progress || 0) * 100)}%`); } });
       const result = await worker.recognize(selectedImage);
       await worker.terminate();
@@ -215,6 +267,19 @@
   function readFile(file) {
     if (!file) return;
     processImage(file);
+  }
+
+  async function readQrFile(file) {
+    if (!file || ocrInProgress) return;
+    ocrInProgress = true;
+    try {
+      const found = await tryQr(file);
+      if (!found) setOcrStatus("Não foi encontrado um código QR legível. Fotografa o QR de frente e com boa luz.", "error");
+    } catch (error) {
+      setOcrStatus(error.message || "Não foi possível ler o código QR.", "error");
+    } finally {
+      ocrInProgress = false;
+    }
   }
 
   function formInvoice() {
@@ -276,6 +341,7 @@
   document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
   $("#invoice-image").addEventListener("change", event => readFile(event.target.files[0]));
+  $("#invoice-qr").addEventListener("change", event => readQrFile(event.target.files[0]));
   $("#remove-image").addEventListener("click", () => { selectedImage = null; $("#image-preview").removeAttribute("src"); $("#image-preview-wrap").classList.add("hidden"); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
