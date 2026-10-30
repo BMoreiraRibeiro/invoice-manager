@@ -362,6 +362,23 @@
     return invoices;
   }
 
+  function safeFilename(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "Filtro";
+  }
+
+  function exportFilename() {
+    const mode = $("#export-mode").value;
+    const today = displayDate(new Date().toISOString().slice(0, 10)).replaceAll("/", "-");
+    if (mode === "dates") {
+      const start = safeFilename($("#export-start").value || "Sem-inicio");
+      const end = safeFilename($("#export-end").value || "Sem-fim");
+      return `Faturas-${start}-a-${end}.xlsx`;
+    }
+    if (mode === "supplier") return `Faturas-${safeFilename($("#export-supplier").selectedOptions[0]?.textContent || "Fornecedor")}.xlsx`;
+    if (mode === "selected") return `Faturas-Selecionadas-${today}.xlsx`;
+    return `Faturas-Todas-${today}.xlsx`;
+  }
+
   function crc32(bytes) {
     let crc = -1;
     for (const byte of bytes) { crc ^= byte; for (let index = 0; index < 8; index++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); }
@@ -383,7 +400,7 @@
     const values = [header, ...rows.map(invoice => [invoice.number, displayDate(invoice.date), invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2)]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
     const sheetRows = values.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, cellIndex) => `<c r="${String.fromCharCode(65 + cellIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`).join("")}</row>`).join("");
     const files = [{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' }, { name: "_rels/.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' }, { name: "xl/workbook.xml", data: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Faturas" sheetId="1" r:id="rId1"/></sheets></workbook>' }, { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' }, { name: "xl/worksheets/sheet1.xml", data: `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:G${values.length - 1}"/></worksheet>` }];
-    const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = `faturas-${new Date().toISOString().slice(0, 10)}.xlsx`; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
   async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); }

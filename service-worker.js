@@ -1,5 +1,5 @@
 /* Fase 1: cache da estrutura estática. Atualizar CACHE_VERSION quando os recursos mudarem. */
-const CACHE_VERSION = "invoice-manager-v21";
+const CACHE_VERSION = "invoice-manager-v22";
 const APP_SHELL = [
   "./",
   "./index.html",
