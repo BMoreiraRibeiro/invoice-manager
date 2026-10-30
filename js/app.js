@@ -439,6 +439,21 @@
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
   ["#export-mode", "#export-start", "#export-end", "#export-supplier"].forEach(selector => $(selector).addEventListener("change", updateExport));
+  // Datas da exportação: coloca as barras automaticamente (dd/mm/aaaa) à medida que se escreve.
+  const formatDateTyping = (value, deleting) => {
+    const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+    let text = digits.slice(0, 2);
+    if (digits.length > 2) text += `/${digits.slice(2, 4)}`;
+    if (digits.length > 4) text += `/${digits.slice(4, 8)}`;
+    if (!deleting && (digits.length === 2 || digits.length === 4)) text += "/";
+    return text;
+  };
+  ["#export-start", "#export-end"].forEach(selector => $(selector).addEventListener("input", event => {
+    const deleting = String(event.inputType || "").startsWith("delete");
+    event.target.value = formatDateTyping(event.target.value, deleting);
+    event.target.setCustomValidity("");
+    if (event.target.value.length === 10 || event.target.value.length === 0) updateExport();
+  }));
   ["#export-start", "#export-end"].forEach(selector => $(selector).addEventListener("blur", event => { if (event.target.value && !/^\d{2}\/\d{2}\/\d{4}$/.test(event.target.value)) event.target.setCustomValidity("Usa o formato dia/mês/ano: dd/mm/aaaa."); else event.target.setCustomValidity(""); }));
   $("#export-button").addEventListener("click", exportXlsx);
 
