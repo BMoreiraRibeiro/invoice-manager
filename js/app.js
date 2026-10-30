@@ -91,7 +91,9 @@
       list.innerHTML = '<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>As faturas guardadas aparecerão aqui.</p></div>';
       return;
     }
-    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong></div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong></article>`).join("");
+    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong></div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions history-actions"><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar" aria-label="Editar fatura">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar" aria-label="Eliminar fatura">×</button></div></article>`).join("");
+    list.querySelectorAll("[data-edit-invoice]").forEach(button => button.addEventListener("click", () => editInvoice(button.dataset.editInvoice)));
+    list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
 
   function updateSupplierSuggestions(query = "") {
