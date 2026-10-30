@@ -193,10 +193,10 @@
     if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
     if (fields.F && /^\d{4}-\d{2}-\d{2}$/.test(fields.F)) result.date = fields.F;
     if (fields.G) result.number = /^FT\b/i.test(fields.G) ? fields.G : `FT ${fields.G}`;
-    const total = fields.Q || fields.O || fields.N;
+    const total = fields.R;
     if (total) result.total = parseMoney(total);
-    if (fields.P) result.vat = parseMoney(fields.P);
-    const bases = [fields.J, fields.L, fields.N].map(parseMoney).filter(value => value > 0);
+    if (fields.Q) result.vat = parseMoney(fields.Q);
+    const bases = [fields.J, fields.K, fields.M, fields.O].map(parseMoney).filter(value => value > 0);
     if (bases.length) result.subtotal = bases.reduce((sum, value) => sum + value, 0);
     return { fields: result, raw: payload };
   }
