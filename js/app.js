@@ -14,6 +14,7 @@
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
   const displayDate = value => { const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value || ""); };
   const inputDate = value => { const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : String(value || ""); };
+  const normalizeSearch = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-PT").trim();
   const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
   const normalizeInvoiceNumber = value => String(value || "").toUpperCase().replace(/[^A-Z0-9./ -]/g, "").replace(/\s+/g, " ").trim();
   const documentNumberPattern = /^(FT|FR|FS|NC|ND|RC)\s*[A-Z0-9./ -]*\d[A-Z0-9./ -]*$/i;
@@ -83,8 +84,8 @@
   }
 
   function renderHistory() {
-    const query = $("#history-search").value.trim().toLocaleLowerCase("pt-PT");
-    const visible = invoices.filter(invoice => [invoice.supplier, invoice.vatNumber, invoice.number].some(value => String(value || "").toLocaleLowerCase("pt-PT").includes(query)));
+    const query = normalizeSearch($("#history-search").value);
+    const visible = invoices.filter(invoice => [invoice.supplier, invoice.vatNumber, invoice.number, displayDate(invoice.date)].some(value => normalizeSearch(value).includes(query)));
     const list = $("#history-list");
     if (!visible.length) {
       list.innerHTML = '<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>As faturas guardadas aparecerão aqui.</p></div>';
