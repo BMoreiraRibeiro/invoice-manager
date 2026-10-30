@@ -63,7 +63,7 @@
             <div class="image-preview-wrap hidden" id="image-preview-wrap"><div class="image-preview-frame"><img id="image-preview" alt="Pré-visualização da fatura"><button class="image-expand-button" type="button" id="open-image-viewer" title="Expandir imagem" aria-label="Expandir imagem">⤢</button></div><button class="text-button" type="button" id="remove-image">Remover imagem</button></div><p class="ocr-status" id="ocr-status" role="status" aria-live="polite"></p>
           </div>
           <form class="form-panel" id="invoice-form">
-            <div class="form-heading"><div><h2>Dados da fatura</h2><p class="muted">Confirma os dados antes de guardar.</p></div><span class="status-label">Validação manual</span></div>
+            <div class="form-heading"><div><h2>Dados da fatura</h2><p class="muted">Confirma os dados antes de guardar.</p></div></div>
             <input id="invoice-id" type="hidden">
             <div class="form-grid"><label>Número da fatura<input id="invoice-number" name="number" inputmode="text" pattern="(FT|FR|FS|NC|ND|RC)[A-Z0-9 ./-]*[0-9][A-Z0-9 ./-]*" autocomplete="off"></label><label>Data<input id="invoice-date" name="date" type="date" required></label><label class="wide">Fornecedor<input id="invoice-supplier" name="supplier" autocomplete="organization" required></label><label>NIF do fornecedor<input id="invoice-vat-number" name="vatNumber" inputmode="numeric" pattern="[0-9]{9}"></label><label>Base tributável<input id="invoice-subtotal" name="subtotal" inputmode="decimal" placeholder="0,00"></label><label>IVA<input id="invoice-vat" name="vat" inputmode="decimal" placeholder="0,00"></label><label>Total<input id="invoice-total" name="total" inputmode="decimal" placeholder="0,00" required></label></div>
             <p class="form-error" id="form-error" role="alert"></p><div class="form-actions"><button class="secondary-button" type="button" id="clear-form">Limpar</button><button class="primary-button" type="submit">Guardar fatura</button></div>
@@ -83,7 +83,7 @@
         <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe os registos</h2><p class="muted">Os filtros não alteram o histórico.</p></div></div><label>Modalidade<select id="export-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="selected">Selecionadas no histórico</option></select></label><div class="form-grid export-filters"><label id="export-start-wrap">Data inicial<input id="export-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="export-end-wrap">Data final<input id="export-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="export-supplier-wrap">Fornecedor<select id="export-supplier"><option value="">Escolher fornecedor</option></select></label></div><div class="export-summary" id="export-summary">0 faturas · 0,00 €</div><button class="primary-button" id="export-button" type="button"><span>⇩</span> Gerar ficheiro Excel</button></div></div>
       </section>
 
-      <footer class="app-footer"><span>Faturas · Versão 0.4.4</span><span id="storage-note">Armazenamento local ativo</span></footer>
+      <footer class="app-footer"><span>Faturas · Versão 0.4.5</span><span id="storage-note">Armazenamento local ativo</span></footer>
     </main>
   </div>
 
