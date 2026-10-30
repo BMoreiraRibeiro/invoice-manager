@@ -95,15 +95,16 @@
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
 
-  function updateSupplierSuggestions() {
+  function updateSupplierSuggestions(query = "") {
     const suggestions = $("#supplier-suggestions");
     if (!suggestions) return;
+    const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT");
     const unique = new Map();
     invoices.forEach(invoice => {
       const supplier = String(invoice.supplier || "").trim();
       if (supplier && !unique.has(supplier.toLocaleLowerCase("pt-PT"))) unique.set(supplier.toLocaleLowerCase("pt-PT"), { name: supplier, vatNumber: invoice.vatNumber });
     });
-    suggestions.innerHTML = [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-PT")).map(item => `<option value="${escapeXml(item.name)}"${item.vatNumber ? ` label="NIF ${escapeXml(item.vatNumber)}"` : ""}></option>`).join("");
+    suggestions.innerHTML = [...unique.values()].filter(item => !normalizedQuery || `${item.name} ${item.vatNumber || ""}`.toLocaleLowerCase("pt-PT").includes(normalizedQuery)).sort((a, b) => a.name.localeCompare(b.name, "pt-PT")).map(item => `<option value="${escapeXml(item.name)}"${item.vatNumber ? ` label="NIF ${escapeXml(item.vatNumber)}"` : ""}></option>`).join("");
   }
 
   function fillForm(invoice) {
@@ -428,6 +429,7 @@
   $("#viewer-zoom-in").addEventListener("click", () => changeViewerZoom(viewerZoom + 0.25));
   enableViewerPan();
   $("#invoice-number").addEventListener("input", event => { event.target.value = normalizeInvoiceNumber(event.target.value); });
+  $("#invoice-supplier").addEventListener("input", event => updateSupplierSuggestions(event.target.value));
   $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; viewerZoom = 1; viewerPan = { x: 0, y: 0 }; $("#image-preview").removeAttribute("src"); $("#image-preview-wrap").classList.add("hidden"); closeImageViewer(); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
