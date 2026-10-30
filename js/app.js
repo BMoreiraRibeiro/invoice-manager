@@ -5,10 +5,11 @@
   const database = { name: "invoice-manager", version: 1, store: "invoices" };
   let invoices = [];
   let selectedImage = null;
+  let ocrInProgress = false;
 
   const $ = selector => document.querySelector(selector);
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
-  const parseMoney = value => Number(String(value || "").replace(/\s/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+  const parseMoney = value => { const text = String(value || "").replace(/\s/g, ""); if (text.includes(",")) return Number(text.replace(/\./g, "").replace(",", ".")) || 0; const parts = text.split("."); return Number(parts.length > 2 ? parts.join("") : text) || 0; };
   const escapeXml = value => String(value ?? "").replace(/[<>&'\"]/g, char => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char]));
 
   function openDatabase() {
@@ -110,11 +111,110 @@
     showPage("capture");
   }
 
+  function setOcrStatus(message, state = "") {
+    const status = $("#ocr-status");
+    status.textContent = message;
+    status.className = `ocr-status${state ? ` is-${state}` : ""}`;
+  }
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => { URL.revokeObjectURL(image.src); resolve(image); };
+      image.onerror = reject;
+      image.src = URL.createObjectURL(file);
+    });
+  }
+
+  function canvasBlob(canvas) {
+    return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Não foi possível preparar a imagem.")), "image/jpeg", 0.9));
+  }
+
+  async function cropDocument(file) {
+    const image = await loadImage(file);
+    const scale = Math.min(1, 1800 / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const sample = (x, y) => { const index = (y * canvas.width + x) * 4; return [pixels[index], pixels[index + 1], pixels[index + 2]]; };
+    const corners = [sample(2, 2), sample(canvas.width - 3, 2), sample(2, canvas.height - 3), sample(canvas.width - 3, canvas.height - 3)];
+    const background = corners.reduce((sum, color) => sum.map((value, index) => value + color[index]), [0, 0, 0]).map(value => value / corners.length);
+    const distance = (x, y) => { const index = (y * canvas.width + x) * 4; return Math.abs(pixels[index] - background[0]) + Math.abs(pixels[index + 1] - background[1]) + Math.abs(pixels[index + 2] - background[2]); };
+    let left = canvas.width, top = canvas.height, right = 0, bottom = 0;
+    for (let y = 0; y < canvas.height; y += 4) for (let x = 0; x < canvas.width; x += 4) if (distance(x, y) > 42) { left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y); }
+    const width = right - left; const height = bottom - top;
+    if (width > canvas.width * 0.55 && height > canvas.height * 0.55) {
+      const padding = Math.round(Math.min(canvas.width, canvas.height) * 0.025);
+      const cropped = document.createElement("canvas");
+      const cropLeft = Math.max(0, left - padding); const cropTop = Math.max(0, top - padding); const cropRight = Math.min(canvas.width, right + padding); const cropBottom = Math.min(canvas.height, bottom + padding);
+      cropped.width = cropRight - cropLeft; cropped.height = cropBottom - cropTop;
+      cropped.getContext("2d").drawImage(canvas, cropLeft, cropTop, cropped.width, cropped.height, 0, 0, cropped.width, cropped.height);
+      return canvasBlob(cropped);
+    }
+    return canvasBlob(canvas);
+  }
+
+  function findMoney(line) {
+    const matches = line.match(/\b\d{1,3}(?:[. ]\d{3})*(?:,\d{2})\b|\b\d+(?:[.,]\d{2})\b/g);
+    return matches?.map(parseMoney).filter(value => value > 0) || [];
+  }
+
+  function parseOcrText(text) {
+    const lines = text.split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const upper = lines.map(line => line.toLocaleUpperCase("pt-PT"));
+    const result = {};
+    const dateMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b/);
+    if (dateMatch) result.date = `${dateMatch[3]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[1].padStart(2, "0")}`;
+    const nifMatch = text.match(/(?:NIF|CONTRIBUINTE|CONTRIB)\D{0,15}(\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d[ .-]?\d)/i);
+    if (nifMatch) result.vatNumber = nifMatch[1].replace(/\D/g, "");
+    const numberMatch = text.match(/\b(?:FT|FA|FR|NC|FATURA)[ -:/]*([A-Z0-9][A-Z0-9./-]{2,})\b/i);
+    if (numberMatch) result.number = numberMatch[1];
+    const totalIndex = upper.findIndex(line => /TOTAL(?: A PAGAR| ILÍQUIDO| LÍQUIDO)?|VALOR A PAGAR/.test(line));
+    const vatIndex = upper.findIndex(line => /\bIVA\b|IMPOSTO/.test(line));
+    const subtotalIndex = upper.findIndex(line => /BASE tribut|SUBTOTAL|INCIDÊNCIA/.test(line));
+    if (totalIndex >= 0) result.total = findMoney(lines[totalIndex])[0] || findMoney(lines[Math.min(totalIndex + 1, lines.length - 1)])[0] || 0;
+    if (vatIndex >= 0) result.vat = findMoney(lines[vatIndex])[0] || findMoney(lines[Math.min(vatIndex + 1, lines.length - 1)])[0] || 0;
+    if (subtotalIndex >= 0) result.subtotal = findMoney(lines[subtotalIndex])[0] || findMoney(lines[Math.min(subtotalIndex + 1, lines.length - 1)])[0] || 0;
+    const supplier = lines.slice(0, Math.max(1, Math.min(5, lines.length))).find(line => !/FATURA|RECIBO|NIF|CONTRIB|TOTAL|IVA|DATA|TAXA|PÁGINA/i.test(line) && /[A-Za-zÀ-ÿ]{3}/.test(line));
+    if (supplier) result.supplier = supplier;
+    return result;
+  }
+
+  function applyOcrFields(fields) {
+    const ids = { number: "invoice-number", date: "invoice-date", supplier: "invoice-supplier", vatNumber: "invoice-vat-number", subtotal: "invoice-subtotal", vat: "invoice-vat", total: "invoice-total" };
+    for (const [field, value] of Object.entries(fields)) if (value && ids[field]) $(`#${ids[field]}`).value = typeof value === "number" ? String(value).replace(".", ",") : value;
+    const found = Object.keys(fields).filter(field => fields[field]).length;
+    setOcrStatus(found ? `Reconhecimento concluído: ${found} campo${found === 1 ? "" : "s"} preenchido${found === 1 ? "" : "s"}. Confirma e corrige os dados.` : "Não foi possível reconhecer campos com confiança. Preenche-os manualmente.", found ? "success" : "");
+  }
+
+  async function processImage(file) {
+    if (!file || ocrInProgress) return;
+    ocrInProgress = true;
+    setOcrStatus("A preparar e recortar a imagem…");
+    try {
+      selectedImage = await cropDocument(file);
+      $("#image-preview").src = URL.createObjectURL(selectedImage);
+      $("#image-preview-wrap").classList.remove("hidden");
+      if (!window.Tesseract) throw new Error("OCR indisponível: abre a aplicação com ligação à Internet uma vez para carregar o motor.");
+      setOcrStatus("A reconhecer o texto da fatura…");
+      const worker = await window.Tesseract.createWorker("por", 1, { logger: message => { if (message.status === "recognizing text") setOcrStatus(`A reconhecer o texto… ${Math.round((message.progress || 0) * 100)}%`); } });
+      const result = await worker.recognize(selectedImage);
+      await worker.terminate();
+      applyOcrFields(parseOcrText(result.data.text));
+    } catch (error) {
+      console.error("OCR da fatura falhou:", error);
+      setOcrStatus(error.message || "Não foi possível ler a imagem. Preenche os dados manualmente.", "error");
+    } finally {
+      ocrInProgress = false;
+    }
+  }
+
   function readFile(file) {
     if (!file) return;
-    selectedImage = file;
-    $("#image-preview").src = URL.createObjectURL(file);
-    $("#image-preview-wrap").classList.remove("hidden");
+    processImage(file);
   }
 
   function formInvoice() {
