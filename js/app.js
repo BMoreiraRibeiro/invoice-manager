@@ -188,19 +188,21 @@
 
   function parseQrPayload(payload) {
     const fields = {};
-    String(payload).split(/[\n;*]/).map(part => part.trim()).forEach(part => {
-      const match = part.match(/^([A-Z])\s*[:=]\s*(.+)$/i);
+    String(payload).split(/[\r\n;*]+/).map(part => part.trim()).filter(Boolean).forEach(part => {
+      const match = part.match(/^([A-Z](?:\d)?)\s*[:=]\s*(.+)$/i);
       if (match) fields[match[1].toUpperCase()] = match[2].trim();
     });
     const result = {};
     if (fields.A && /^\d{9}$/.test(fields.A.replace(/\D/g, ""))) result.vatNumber = fields.A.replace(/\D/g, "");
-    if (fields.F && /^\d{4}-\d{2}-\d{2}$/.test(fields.F)) result.date = fields.F;
+    if (fields.F) {
+      const date = fields.F.match(/^(\d{4})(\d{2})(\d{2})$/) || fields.F.match(/^(\d{4})[-/.](\d{2})[-/.](\d{2})$/);
+      if (date) result.date = `${date[1]}-${date[2]}-${date[3]}`;
+    }
     const qrNumber = fields.G?.match(/\b(FT|FR|FS|NC|ND|RC)\s*[:#./-]?\s*([A-Z0-9][A-Z0-9 ./-]*\d[A-Z0-9 ./-]*)\b/i);
     if (qrNumber) result.number = `${qrNumber[1].toUpperCase()} ${qrNumber[2]}`.replace(/\s+/g, " ").trim();
-    const total = fields.R;
-    if (total) result.total = parseMoney(total);
-    if (fields.Q) result.vat = parseMoney(fields.Q);
-    const bases = [fields.J, fields.K, fields.M, fields.O].map(parseMoney).filter(value => value > 0);
+    if (fields.N) result.vat = parseMoney(fields.N);
+    if (fields.O) result.total = parseMoney(fields.O);
+    const bases = Object.entries(fields).filter(([key]) => /^I[2-8]$/.test(key) && !["I4", "I6", "I8"].includes(key)).map(([, value]) => parseMoney(value)).filter(value => value > 0);
     if (bases.length) result.subtotal = bases.reduce((sum, value) => sum + value, 0);
     return { fields: result, raw: payload };
   }
