@@ -254,6 +254,7 @@
     try {
       let qrFields = {};
       try { qrFields = await tryQr(file) || {}; } catch (error) { console.warn("Leitura QR falhou:", error); }
+      if (Object.keys(qrFields).length) applyOcrFields(qrFields);
       selectedImage = await cropDocument(file);
       $("#image-preview").src = URL.createObjectURL(selectedImage);
       $("#image-preview-wrap").classList.remove("hidden");
