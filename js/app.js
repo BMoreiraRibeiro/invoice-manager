@@ -89,16 +89,78 @@
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
 
-  function updateSupplierSuggestions(query = "") {
-    const suggestions = $("#supplier-suggestions");
-    if (!suggestions) return;
-    const normalizedQuery = query.trim().toLocaleLowerCase("pt-PT");
-    const unique = new Map();
+  // Lista de pesquisa de fornecedores (substitui o <datalist>, que se comporta mal nos telemóveis).
+  let supplierMatches = [];
+  let supplierActive = -1;
+
+  function supplierOptions() {
+    const options = new Map();
     invoices.forEach(invoice => {
-      const supplier = String(invoice.supplier || "").trim();
-      if (supplier && !unique.has(supplier.toLocaleLowerCase("pt-PT"))) unique.set(supplier.toLocaleLowerCase("pt-PT"), { name: supplier, vatNumber: invoice.vatNumber });
+      const name = String(invoice.supplier || "").trim();
+      if (!name) return;
+      const vatNumber = String(invoice.vatNumber || "").trim();
+      const key = `${normalizeSearch(name)}|${vatNumber}`;
+      const option = options.get(key) || { name, vatNumber, count: 0 };
+      option.count += 1;
+      options.set(key, option);
     });
-    suggestions.innerHTML = [...unique.values()].filter(item => !normalizedQuery || `${item.name} ${item.vatNumber || ""}`.toLocaleLowerCase("pt-PT").includes(normalizedQuery)).sort((a, b) => a.name.localeCompare(b.name, "pt-PT")).map(item => `<option value="${escapeXml(item.name)}"${item.vatNumber ? ` label="NIF ${escapeXml(item.vatNumber)}"` : ""}></option>`).join("");
+    return [...options.values()];
+  }
+
+  function closeSupplierList() {
+    const list = $("#supplier-suggestions");
+    if (!list) return;
+    list.classList.add("hidden");
+    $("#invoice-supplier").setAttribute("aria-expanded", "false");
+    $("#invoice-supplier").removeAttribute("aria-activedescendant");
+    supplierActive = -1;
+  }
+
+  function setSupplierActive(index) {
+    const options = [...$("#supplier-suggestions").children];
+    if (!options.length) return;
+    supplierActive = (index + options.length) % options.length;
+    options.forEach((option, position) => { option.classList.toggle("is-active", position === supplierActive); option.setAttribute("aria-selected", position === supplierActive ? "true" : "false"); });
+    $("#invoice-supplier").setAttribute("aria-activedescendant", options[supplierActive].id);
+    options[supplierActive].scrollIntoView?.({ block: "nearest" });
+  }
+
+  function updateSupplierSuggestions() {
+    const list = $("#supplier-suggestions");
+    const input = $("#invoice-supplier");
+    if (!list || !input) return;
+    if (document.activeElement !== input) return closeSupplierList();
+    const query = normalizeSearch(input.value);
+    const digits = query.replace(/\D/g, "");
+    const startsWith = option => (query && normalizeSearch(option.name).startsWith(query) ? 0 : 1);
+    supplierMatches = supplierOptions()
+      .filter(option => !query || normalizeSearch(option.name).includes(query) || (digits && option.vatNumber.includes(digits)))
+      .sort((a, b) => startsWith(a) - startsWith(b) || b.count - a.count || a.name.localeCompare(b.name, "pt-PT"))
+      .slice(0, 30);
+    // Sem resultados, ou já escrito por inteiro e é a única opção: não há nada a sugerir.
+    if (!supplierMatches.length || (supplierMatches.length === 1 && normalizeSearch(supplierMatches[0].name) === query)) return closeSupplierList();
+    list.innerHTML = supplierMatches.map((option, index) => `<span class="supplier-option" role="option" id="supplier-option-${index}" data-index="${index}" aria-selected="false"><strong>${escapeXml(option.name)}</strong><small>${option.vatNumber ? `NIF ${escapeXml(option.vatNumber)} · ` : ""}${option.count} fatura${option.count === 1 ? "" : "s"}</small></span>`).join("");
+    supplierActive = -1;
+    // Abre para baixo; se não houver espaço (teclado aberto), abre para cima.
+    const rect = input.getBoundingClientRect();
+    const viewport = window.visualViewport?.height || window.innerHeight;
+    const below = viewport - rect.bottom;
+    const up = below < 190 && rect.top > below;
+    list.classList.toggle("is-up", up);
+    list.style.maxHeight = `${Math.max(120, Math.min(280, (up ? rect.top : below) - 16))}px`;
+    list.scrollTop = 0;
+    list.classList.remove("hidden");
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function chooseSupplier(index) {
+    const option = supplierMatches[index];
+    if (!option) return;
+    $("#invoice-supplier").value = option.name;
+    if (option.vatNumber) $("#invoice-vat-number").value = option.vatNumber;
+    closeSupplierList();
+    // No telemóvel, fecha o teclado para o formulário ficar visível.
+    if (window.matchMedia?.("(pointer: coarse)").matches) $("#invoice-supplier").blur();
   }
 
   function fillForm(invoice) {
@@ -419,7 +481,7 @@
     const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
-  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); updateSupplierSuggestions(); }
+  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); }
 
   document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
@@ -433,7 +495,26 @@
   $("#viewer-zoom-in").addEventListener("click", () => changeViewerZoom(viewerZoom + 0.25));
   enableViewerPan();
   $("#invoice-number").addEventListener("input", event => { event.target.value = normalizeInvoiceNumber(event.target.value); });
-  $("#invoice-supplier").addEventListener("input", event => updateSupplierSuggestions(event.target.value));
+  const supplierInput = $("#invoice-supplier");
+  const supplierList = $("#supplier-suggestions");
+  supplierInput.addEventListener("input", updateSupplierSuggestions);
+  supplierInput.addEventListener("focus", () => {
+    updateSupplierSuggestions();
+    // No telemóvel, sobe o campo para ficar acima do teclado e sobrar espaço para a lista.
+    if (window.innerWidth <= 700) setTimeout(() => { if (document.activeElement === supplierInput) supplierInput.scrollIntoView?.({ block: "start", behavior: "smooth" }); }, 300);
+  });
+  supplierInput.addEventListener("blur", closeSupplierList);
+  supplierInput.addEventListener("keydown", event => {
+    const open = !supplierList.classList.contains("hidden");
+    if (event.key === "ArrowDown") { event.preventDefault(); if (!open) updateSupplierSuggestions(); setSupplierActive(supplierActive + 1); }
+    else if (event.key === "ArrowUp" && open) { event.preventDefault(); setSupplierActive(supplierActive - 1); }
+    else if (event.key === "Enter" && open && supplierActive >= 0) { event.preventDefault(); chooseSupplier(supplierActive); }
+    else if (event.key === "Escape" && open) { event.preventDefault(); closeSupplierList(); }
+    else if (event.key === "Tab") closeSupplierList();
+  });
+  // Manter o foco no campo ao tocar numa sugestão (senão o campo perde o foco e a lista fecha antes do toque).
+  supplierList.addEventListener("mousedown", event => event.preventDefault());
+  supplierList.addEventListener("click", event => { const option = event.target.closest("[data-index]"); if (option) chooseSupplier(Number(option.dataset.index)); });
   $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; viewerZoom = 1; viewerPan = { x: 0, y: 0 }; $("#image-preview").removeAttribute("src"); $("#image-preview-wrap").classList.add("hidden"); closeImageViewer(); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });

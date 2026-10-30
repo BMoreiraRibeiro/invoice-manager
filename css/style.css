@@ -24,3 +24,14 @@
 .export-panel .form-panel select,.export-panel .form-panel input{display:block;width:100%;min-width:0;height:56px;padding:14px 16px;font:inherit;font-size:17px;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .export-panel .form-panel select:focus,.export-panel .form-panel input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .export-panel #export-button{min-height:56px;margin-top:28px;font-size:16px}
+
+/* Fornecedor: lista de pesquisa própria (substitui o datalist) */
+.supplier-combo{position:relative;display:block;min-width:0}
+.supplier-suggestions{position:absolute;z-index:30;top:calc(100% + 4px);left:0;right:0;display:block;padding:4px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(24,39,75,.18);font-weight:400}
+.supplier-suggestions.is-up{top:auto;bottom:calc(100% + 4px)}
+.supplier-option{display:grid;gap:2px;min-height:48px;padding:9px 12px;border-radius:8px;cursor:pointer;touch-action:manipulation;text-align:left}
+.supplier-option strong{font-size:14px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.supplier-option small{color:var(--muted);font-size:12px}
+.supplier-option:hover,.supplier-option.is-active{background:var(--soft)}
+#invoice-supplier{scroll-margin-top:96px}
+@media(max-width:700px){.supplier-suggestions{left:auto;width:max(100%,min(300px,calc(100vw - 36px)))}}
