@@ -2,3 +2,4 @@
 .capture-grid{grid-template-columns:1fr 1.25fr}.capture-actions .primary-button,.capture-actions .secondary-button{padding:11px 14px}.invoice-row{flex-wrap:wrap}.invoice-main{min-width:calc(100% - 120px)}.invoice-actions{margin-left:auto}.toolbar{align-items:center}
 @media(max-width:360px){.main-content{padding-left:13px;padding-right:13px}.stat-value{font-size:19px}.page-heading h1{font-size:23px}}
 @media(max-width:700px){.capture-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.export-panel{grid-template-columns:1fr;max-width:none}.export-panel .form-panel{padding:19px}.export-filters{grid-template-columns:1fr}.export-filters label.wide{grid-column:auto}.export-panel #export-button{width:100%;justify-content:center}}
