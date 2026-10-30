@@ -7,6 +7,8 @@
   let selectedImage = null;
   let ocrInProgress = false;
   let previewZoom = 1;
+  let viewerZoom = 1;
+  let viewerPan = { x: 0, y: 0 };
 
   const $ = selector => document.querySelector(selector);
   const money = value => new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value) || 0);
@@ -233,16 +235,15 @@
   async function tryQr(file) {
     setOcrStatus("A procurar o código QR…");
     const qr = await readQr(file);
-    if (!qr) return false;
-    applyOcrFields(qr.fields);
+    if (!qr) return null;
     setOcrStatus(`Código QR lido: ${Object.keys(qr.fields).length} campo${Object.keys(qr.fields).length === 1 ? "" : "s"}. Confirma e completa o fornecedor.`, "success");
-    return true;
+    return qr.fields;
   }
 
-  function applyOcrFields(fields) {
+  function applyOcrFields(fields, lockedFields = {}) {
     const ids = { number: "invoice-number", date: "invoice-date", supplier: "invoice-supplier", vatNumber: "invoice-vat-number", subtotal: "invoice-subtotal", vat: "invoice-vat", total: "invoice-total" };
-    for (const [field, value] of Object.entries(fields)) if (value && ids[field]) $(`#${ids[field]}`).value = typeof value === "number" ? String(value).replace(".", ",") : value;
-    const found = Object.keys(fields).filter(field => fields[field]).length;
+    for (const [field, value] of Object.entries(fields)) if (value && ids[field] && !lockedFields[field]) $(`#${ids[field]}`).value = typeof value === "number" ? String(value).replace(".", ",") : value;
+    const found = Object.keys({ ...fields, ...lockedFields }).filter(field => fields[field] || lockedFields[field]).length;
     setOcrStatus(found ? `Reconhecimento concluído: ${found} campo${found === 1 ? "" : "s"} preenchido${found === 1 ? "" : "s"}. Confirma e corrige os dados.` : "Não foi possível reconhecer campos com confiança. Preenche-os manualmente.", found ? "success" : "");
   }
 
@@ -251,17 +252,17 @@
     ocrInProgress = true;
     setOcrStatus("A procurar dados fiscais no código QR…");
     try {
-      let qrFound = false;
-      try { qrFound = await tryQr(file); } catch (error) { console.warn("Leitura QR falhou:", error); }
+      let qrFields = {};
+      try { qrFields = await tryQr(file) || {}; } catch (error) { console.warn("Leitura QR falhou:", error); }
       selectedImage = await cropDocument(file);
       $("#image-preview").src = URL.createObjectURL(selectedImage);
       $("#image-preview-wrap").classList.remove("hidden");
       if (!window.Tesseract) throw new Error("OCR indisponível: abre a aplicação com ligação à Internet uma vez para carregar o motor.");
-      setOcrStatus(qrFound ? "QR lido. A procurar o fornecedor no texto…" : "A reconhecer o texto da fatura…");
+      setOcrStatus(Object.keys(qrFields).length ? "QR lido. A procurar apenas os dados em falta no texto…" : "A reconhecer o texto da fatura…");
       const worker = await window.Tesseract.createWorker("por", 1, { logger: message => { if (message.status === "recognizing text") setOcrStatus(`A reconhecer o texto… ${Math.round((message.progress || 0) * 100)}%`); } });
       const result = await worker.recognize(selectedImage);
       await worker.terminate();
-      applyOcrFields(parseOcrText(result.data.text));
+      applyOcrFields(parseOcrText(result.data.text), qrFields);
     } catch (error) {
       console.error("OCR da fatura falhou:", error);
       setOcrStatus(error.message || "Não foi possível ler a imagem. Preenche os dados manualmente.", "error");
@@ -280,12 +281,46 @@
     $("#image-preview").style.transform = `scale(${previewZoom})`;
   }
 
+  function updateViewerImage() {
+    $("#image-viewer-image").style.transform = `translate3d(${viewerPan.x}px, ${viewerPan.y}px, 0) scale(${viewerZoom})`;
+  }
+
+  function openImageViewer() {
+    if (!selectedImage && !$("#image-preview").src) return;
+    $("#image-viewer-image").src = $("#image-preview").src;
+    viewerZoom = 1;
+    viewerPan = { x: 0, y: 0 };
+    updateViewerImage();
+    $("#image-viewer").classList.remove("hidden");
+  }
+
+  function closeImageViewer() {
+    $("#image-viewer").classList.add("hidden");
+  }
+
+  function changeViewerZoom(value) {
+    viewerZoom = Math.min(4, Math.max(1, value));
+    if (viewerZoom === 1) viewerPan = { x: 0, y: 0 };
+    updateViewerImage();
+  }
+
+  function enableViewerPan() {
+    const viewport = $("#image-viewer-viewport");
+    let dragging = false;
+    let start = { x: 0, y: 0 };
+    viewport.addEventListener("pointerdown", event => { if (viewerZoom <= 1) return; dragging = true; start = { x: event.clientX - viewerPan.x, y: event.clientY - viewerPan.y }; viewport.classList.add("is-dragging"); viewport.setPointerCapture(event.pointerId); });
+    viewport.addEventListener("pointermove", event => { if (!dragging) return; viewerPan = { x: event.clientX - start.x, y: event.clientY - start.y }; updateViewerImage(); });
+    viewport.addEventListener("pointerup", () => { dragging = false; viewport.classList.remove("is-dragging"); });
+    viewport.addEventListener("pointercancel", () => { dragging = false; viewport.classList.remove("is-dragging"); });
+  }
+
   async function readQrFile(file) {
     if (!file || ocrInProgress) return;
     ocrInProgress = true;
     try {
-      const found = await tryQr(file);
-      if (!found) setOcrStatus("Não foi encontrado um código QR legível. Fotografa o QR de frente e com boa luz.", "error");
+      const fields = await tryQr(file);
+      if (fields) { applyOcrFields(fields); selectedImage = file; $("#image-preview").src = URL.createObjectURL(file); $("#image-preview-wrap").classList.remove("hidden"); }
+      else setOcrStatus("Não foi encontrado um código QR legível. Fotografa o QR de frente e com boa luz.", "error");
     } catch (error) {
       setOcrStatus(error.message || "Não foi possível ler o código QR.", "error");
     } finally {
@@ -354,11 +389,15 @@
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
   $("#invoice-image").addEventListener("change", event => readFile(event.target.files[0]));
   $("#invoice-qr").addEventListener("change", event => readQrFile(event.target.files[0]));
-  $("#zoom-out").addEventListener("click", () => setPreviewZoom(previewZoom - 0.25));
-  $("#zoom-reset").addEventListener("click", () => setPreviewZoom(1));
-  $("#zoom-in").addEventListener("click", () => setPreviewZoom(previewZoom + 0.25));
+  $("#open-image-viewer").addEventListener("click", openImageViewer);
+  $("#close-image-viewer").addEventListener("click", closeImageViewer);
+  $("[data-close-viewer]").addEventListener("click", closeImageViewer);
+  $("#viewer-zoom-out").addEventListener("click", () => changeViewerZoom(viewerZoom - 0.25));
+  $("#viewer-zoom-reset").addEventListener("click", () => changeViewerZoom(1));
+  $("#viewer-zoom-in").addEventListener("click", () => changeViewerZoom(viewerZoom + 0.25));
+  enableViewerPan();
   $("#invoice-number").addEventListener("input", event => { event.target.value = normalizeInvoiceNumber(event.target.value); });
-  $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; $("#image-preview").removeAttribute("src"); $("#image-preview").style.transform = "scale(1)"; $("#image-preview-wrap").classList.add("hidden"); });
+  $("#remove-image").addEventListener("click", () => { selectedImage = null; previewZoom = 1; viewerZoom = 1; viewerPan = { x: 0, y: 0 }; $("#image-preview").removeAttribute("src"); $("#image-preview-wrap").classList.add("hidden"); closeImageViewer(); });
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
