@@ -59,3 +59,8 @@
 .primary-button.is-danger:hover{background:#a93a3a}
 .primary-button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 .manage-status{min-height:20px;margin:14px 0 0;color:var(--muted);font-size:14px;font-weight:600;text-align:center}
+
+/* Ecrã inicial: seletor de mês */
+.dashboard-filter{display:grid;gap:6px;max-width:340px;margin:0 0 16px;color:var(--muted);font-size:13px;font-weight:600}
+.dashboard-filter select{width:100%;min-width:0;height:48px;padding:0 14px;font:inherit;font-size:16px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.dashboard-filter select:focus{outline:2px solid var(--accent);outline-offset:1px}

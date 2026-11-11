@@ -9,7 +9,7 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 - Leitura dedicada do QR fiscal português, com preenchimento prioritário dos campos estruturados e OCR como complemento.
 - Formulário de validação manual com validação de NIF e coerência de valores.
 - NIF próprio (do cliente) e observações em cada fatura. O NIF próprio é lido do código QR (campo B do adquirente) ou, na leitura por imagem, do texto junto a "Cliente", "Adquirente" ou "Exmo(s) Sr(s)"; "consumidor final" (999999990) é ignorado.
-- Persistência local em IndexedDB, dashboard com totais e histórico pesquisável.
+- Persistência local em IndexedDB, dashboard com totais (com seletor de mês ou todos os meses) e histórico pesquisável.
 - Edição e eliminação de faturas com confirmação.
 - Arquivo de faturas: as arquivadas ficam no histórico (filtros Todas, Ativas e Arquivadas), mas deixam de contar no dashboard e, por defeito, na exportação (há uma opção para as incluir).
 - Menu Gerir: arquivar, repor ou eliminar várias faturas de uma vez, com os mesmos âmbitos da exportação (todas, intervalo de datas, fornecedor ou NIF próprio), resumo prévio e confirmação.

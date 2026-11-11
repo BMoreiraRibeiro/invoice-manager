@@ -87,13 +87,28 @@
     if (name === "manage") updateManage();
   }
 
+  const monthLabel = key => {
+    const [year, month] = key.split("-").map(Number);
+    const text = new Intl.DateTimeFormat("pt-PT", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+    return text.charAt(0).toLocaleUpperCase("pt-PT") + text.slice(1);
+  };
+
   function updateDashboard() {
     const active = invoices.filter(invoice => !isArchived(invoice));
-    const archivedCount = invoices.length - active.length;
-    const total = active.reduce((sum, invoice) => sum + invoice.total, 0);
-    const vat = active.reduce((sum, invoice) => sum + invoice.vat, 0);
-    const month = new Date().toISOString().slice(0, 7);
-    $("#stat-count").textContent = active.length;
+    // Meses com faturas ativas, do mais recente para o mais antigo; mantém o mês escolhido se ainda existir.
+    const monthCounts = new Map();
+    active.forEach(invoice => { const key = String(invoice.date).slice(0, 7); if (/^\d{4}-\d{2}$/.test(key)) monthCounts.set(key, (monthCounts.get(key) || 0) + 1); });
+    const monthSelect = $("#dashboard-month");
+    const chosenMonth = monthSelect.value;
+    monthSelect.innerHTML = '<option value="all">Todos os meses</option>' + [...monthCounts.keys()].sort().reverse().map(key => `<option value="${key}">${escapeXml(monthLabel(key))} · ${monthCounts.get(key)} fatura${monthCounts.get(key) === 1 ? "" : "s"}</option>`).join("");
+    monthSelect.value = monthCounts.has(chosenMonth) ? chosenMonth : "all";
+    const inPeriod = invoice => monthSelect.value === "all" || String(invoice.date).startsWith(monthSelect.value);
+    const shown = active.filter(inPeriod);
+    const archivedCount = invoices.filter(invoice => isArchived(invoice) && inPeriod(invoice)).length;
+    const total = shown.reduce((sum, invoice) => sum + invoice.total, 0);
+    const vat = shown.reduce((sum, invoice) => sum + invoice.vat, 0);
+    const month = new Date().toISOString().slice(0, 7); // o cartão "Este mês" é sempre o mês atual
+    $("#stat-count").textContent = shown.length;
     $("#stat-total").textContent = money(total);
     $("#stat-vat").textContent = money(vat);
     $("#stat-month").textContent = active.filter(invoice => invoice.date.startsWith(month)).length;
@@ -733,6 +748,7 @@
   $("#manage-state").addEventListener("change", () => { $("#manage-status").textContent = ""; updateManage(); });
   document.querySelectorAll("#manage-action .segment").forEach(button => button.addEventListener("click", () => { manageState.action = button.dataset.action; $("#manage-status").textContent = ""; updateManage(); }));
   $("#manage-button").addEventListener("click", runManage);
+  $("#dashboard-month").addEventListener("change", updateDashboard);
   document.querySelectorAll("#history-filters .chip").forEach(chip => chip.addEventListener("click", () => { historyFilter = chip.dataset.filter; renderHistory(); }));
 
   const themeButton = $("#theme-toggle"); const savedTheme = localStorage.getItem("invoice-theme"); if (savedTheme === "dark") document.documentElement.dataset.theme = "dark";
