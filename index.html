@@ -23,6 +23,7 @@
         <button class="nav-link" data-page="capture"><span>＋</span> Nova fatura</button>
         <button class="nav-link" data-page="history"><span>▤</span> Histórico</button>
         <button class="nav-link" data-page="export"><span>⇧</span> Exportação</button>
+        <button class="nav-link" data-page="manage"><span>☰</span> Gerir</button>
       </nav>
       <div class="sidebar-bottom">
         <div class="privacy-note"><span class="privacy-dot"></span><span>Os teus dados ficam no dispositivo.</span></div>
@@ -42,7 +43,7 @@
           <button class="primary-button" data-page="capture"><span>＋</span> Nova fatura</button>
         </div>
         <div class="stats-grid">
-          <article class="stat-card"><div class="stat-label">Faturas registadas <span>▤</span></div><div class="stat-value" id="stat-count">0</div><div class="stat-foot">Total de documentos</div></article>
+          <article class="stat-card"><div class="stat-label">Faturas registadas <span>▤</span></div><div class="stat-value" id="stat-count">0</div><div class="stat-foot" id="stat-foot-count">Documentos ativos</div></article>
           <article class="stat-card"><div class="stat-label">Total de despesas <span>€</span></div><div class="stat-value" id="stat-total">0,00 €</div><div class="stat-foot">Soma das faturas</div></article>
           <article class="stat-card"><div class="stat-label">Total de IVA <span>%</span></div><div class="stat-value" id="stat-vat">0,00 €</div><div class="stat-foot">Imposto registado</div></article>
           <article class="stat-card"><div class="stat-label">Este mês <span>◷</span></div><div class="stat-value" id="stat-month">0</div><div class="stat-foot">Faturas no mês atual</div></article>
@@ -69,16 +70,24 @@
 
       <section class="page" id="page-history">
         <div class="page-heading"><div><p class="eyebrow">DOCUMENTOS</p><h1>Histórico</h1><p class="muted">Consulta e gere as tuas faturas.</p></div></div>
-        <div class="toolbar"><input id="history-search" type="search" placeholder="Pesquisar fornecedor, NIF, número, data ou observações" aria-label="Pesquisar faturas" autocomplete="off"><button class="secondary-button" type="button" id="history-clear">Limpar pesquisa</button></div><div id="history-list" class="invoice-list"></div>
+        <div class="toolbar"><input id="history-search" type="search" placeholder="Pesquisar fornecedor, NIF, número, data ou observações" aria-label="Pesquisar faturas" autocomplete="off"><button class="secondary-button" type="button" id="history-clear">Limpar pesquisa</button></div>
+        <div class="filter-chips" id="history-filters" role="group" aria-label="Filtrar por estado"><button class="chip active" type="button" data-filter="all" aria-pressed="true">Todas <span id="count-all">0</span></button><button class="chip" type="button" data-filter="active" aria-pressed="false">Ativas <span id="count-active">0</span></button><button class="chip" type="button" data-filter="archived" aria-pressed="false">Arquivadas <span id="count-archived">0</span></button></div>
+        <div id="history-list" class="invoice-list"></div>
       </section>
 
       <section class="page" id="page-export">
         <div class="page-heading"><div><p class="eyebrow">DADOS</p><h1>Exportação</h1><p class="muted">Prepara ficheiros Excel com os teus registos.</p></div></div>
         <div class="export-summary" id="export-summary" role="status" aria-live="polite"><div class="export-summary-item"><span>Faturas a exportar</span><strong id="export-count">0</strong></div><div class="export-summary-item"><span>Valor total</span><strong id="export-total">0,00 €</strong></div></div>
-        <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe os registos</h2><p class="muted">Os filtros não alteram o histórico.</p></div></div><label>Modalidade<select id="export-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="own">NIF próprio</option></select></label><div class="form-grid export-filters"><label id="export-start-wrap">Data inicial<input id="export-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="export-end-wrap">Data final<input id="export-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="export-supplier-wrap">Fornecedor<select id="export-supplier"><option value="">Escolher fornecedor</option></select></label><label class="wide" id="export-own-wrap">NIF próprio<select id="export-own"><option value="">Escolher NIF próprio</option></select></label></div><button class="primary-button" id="export-button" type="button"><span>⇩</span> Gerar ficheiro Excel</button></div></div>
+        <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe os registos</h2><p class="muted">Os filtros não alteram o histórico.</p></div></div><label>Modalidade<select id="export-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="own">NIF próprio</option></select></label><div class="form-grid export-filters"><label id="export-start-wrap">Data inicial<input id="export-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="export-end-wrap">Data final<input id="export-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="export-supplier-wrap">Fornecedor<select id="export-supplier"><option value="">Escolher fornecedor</option></select></label><label class="wide" id="export-own-wrap">NIF próprio<select id="export-own"><option value="">Escolher NIF próprio</option></select></label></div><label class="check-row"><input type="checkbox" id="export-archived"> Incluir faturas arquivadas</label><button class="primary-button" id="export-button" type="button"><span>⇩</span> Gerar ficheiro Excel</button></div></div>
       </section>
 
-      <footer class="app-footer"><span>Faturas · Versão 0.5.13</span><span id="storage-note">Armazenamento local ativo</span></footer>
+      <section class="page" id="page-manage">
+        <div class="page-heading"><div><p class="eyebrow">DADOS</p><h1>Gerir</h1><p class="muted">Arquiva ou elimina várias faturas de uma só vez.</p></div></div>
+        <div class="export-summary" id="manage-summary" role="status" aria-live="polite"><div class="export-summary-item"><span id="manage-count-label">Faturas a arquivar</span><strong id="manage-count">0</strong></div><div class="export-summary-item"><span>Valor total</span><strong id="manage-total">0,00 €</strong></div></div>
+        <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe a ação e as faturas</h2><p class="muted" id="manage-help"></p></div></div><div class="segmented" id="manage-action" role="group" aria-label="Ação"><button class="segment active" type="button" data-action="archive" aria-pressed="true">Arquivar</button><button class="segment" type="button" data-action="restore" aria-pressed="false">Repor</button><button class="segment danger" type="button" data-action="delete" aria-pressed="false">Eliminar</button></div><label>Modalidade<select id="manage-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="own">NIF próprio</option></select></label><div class="form-grid export-filters"><label id="manage-start-wrap">Data inicial<input id="manage-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="manage-end-wrap">Data final<input id="manage-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="manage-supplier-wrap">Fornecedor<select id="manage-supplier"><option value="">Escolher fornecedor</option></select></label><label class="wide" id="manage-own-wrap">NIF próprio<select id="manage-own"><option value="">Escolher NIF próprio</option></select></label></div><label id="manage-state-wrap" class="hidden">Faturas a eliminar<select id="manage-state"><option value="all">Ativas e arquivadas</option><option value="active">Só ativas</option><option value="archived">Só arquivadas</option></select></label><button class="primary-button" id="manage-button" type="button" disabled><span id="manage-button-icon">▣</span><span id="manage-button-text">Arquivar</span></button><p class="manage-status" id="manage-status" role="status" aria-live="polite"></p></div></div>
+      </section>
+
+      <footer class="app-footer"><span>Faturas · Versão 0.5.14</span><span id="storage-note">Armazenamento local ativo</span></footer>
     </main>
   </div>
 
@@ -87,9 +96,10 @@
     <button class="mobile-nav-link" data-page="capture"><span>＋</span><small>Nova</small></button>
     <button class="mobile-nav-link" data-page="history"><span>▤</span><small>Histórico</small></button>
     <button class="mobile-nav-link" data-page="export"><span>⇧</span><small>Exportar</small></button>
+    <button class="mobile-nav-link" data-page="manage"><span>☰</span><small>Gerir</small></button>
   </nav>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" crossorigin="anonymous"></script>
-  <script src="./js/app.js?v=0.5.13"></script>
+  <script src="./js/app.js?v=0.5.14"></script>
 </body>
 </html>

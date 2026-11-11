@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const pages = ["dashboard", "capture", "history", "export"];
+  const pages = ["dashboard", "capture", "history", "export", "manage"];
   const NO_NIF = "999999990"; // "consumidor final": fatura sem NIF do cliente
   const database = { name: "invoice-manager", version: 1, store: "invoices" };
   let invoices = [];
@@ -57,6 +57,25 @@
     });
   }
 
+  // Faturas arquivadas ficam no histórico, mas deixam de entrar nos totais e (por defeito) na exportação.
+  const isArchived = invoice => invoice.archived === true;
+  const archivedCopy = invoice => ({ ...invoice, archived: true, archivedAt: new Date().toISOString() });
+  const restoredCopy = invoice => { const copy = { ...invoice }; delete copy.archived; delete copy.archivedAt; return copy; };
+
+  // Grava várias alterações e remoções numa única transação: ou ficam todas, ou nenhuma.
+  async function writeInvoices(changes = [], removals = []) {
+    const db = await openDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(database.store, "readwrite");
+      const store = transaction.objectStore(database.store);
+      changes.forEach(invoice => store.put(invoice));
+      removals.forEach(id => store.delete(id));
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
   function showPage(name) {
     if (!pages.includes(name)) return;
     document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === `page-${name}`));
@@ -65,27 +84,46 @@
     history.replaceState(null, "", `#${name}`);
     if (name === "history") renderHistory();
     if (name === "export") updateExport();
+    if (name === "manage") updateManage();
   }
 
   function updateDashboard() {
-    const total = invoices.reduce((sum, invoice) => sum + invoice.total, 0);
-    const vat = invoices.reduce((sum, invoice) => sum + invoice.vat, 0);
+    const active = invoices.filter(invoice => !isArchived(invoice));
+    const archivedCount = invoices.length - active.length;
+    const total = active.reduce((sum, invoice) => sum + invoice.total, 0);
+    const vat = active.reduce((sum, invoice) => sum + invoice.vat, 0);
     const month = new Date().toISOString().slice(0, 7);
-    $("#stat-count").textContent = invoices.length;
+    $("#stat-count").textContent = active.length;
     $("#stat-total").textContent = money(total);
     $("#stat-vat").textContent = money(vat);
-    $("#stat-month").textContent = invoices.filter(invoice => invoice.date.startsWith(month)).length;
+    $("#stat-month").textContent = active.filter(invoice => invoice.date.startsWith(month)).length;
+    $("#stat-foot-count").textContent = archivedCount ? `Documentos ativos · ${archivedCount} arquivada${archivedCount === 1 ? "" : "s"}` : "Documentos ativos";
   }
+
+  let historyFilter = "all"; // all | active | archived
 
   function renderHistory() {
     const query = normalizeSearch($("#history-search").value);
-    const visible = invoices.filter(invoice => [invoice.supplier, invoice.vatNumber, invoice.ownVatNumber, invoice.number, invoice.notes, displayDate(invoice.date)].some(value => normalizeSearch(value).includes(query)));
+    const archivedTotal = invoices.filter(isArchived).length;
+    $("#count-all").textContent = invoices.length;
+    $("#count-active").textContent = invoices.length - archivedTotal;
+    $("#count-archived").textContent = archivedTotal;
+    document.querySelectorAll("#history-filters .chip").forEach(chip => { const on = chip.dataset.filter === historyFilter; chip.classList.toggle("active", on); chip.setAttribute("aria-pressed", String(on)); });
+    const byState = invoice => historyFilter === "all" || (historyFilter === "archived") === isArchived(invoice);
+    const visible = invoices.filter(invoice => byState(invoice) && [invoice.supplier, invoice.vatNumber, invoice.ownVatNumber, invoice.number, invoice.notes, displayDate(invoice.date)].some(value => normalizeSearch(value).includes(query)));
     const list = $("#history-list");
     if (!visible.length) {
-      list.innerHTML = '<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>As faturas guardadas aparecerão aqui.</p></div>';
+      const message = historyFilter === "archived" && !query ? "Ainda não arquivaste nenhuma fatura." : "As faturas guardadas aparecerão aqui.";
+      list.innerHTML = `<div class="empty-state compact"><div class="empty-icon">▤</div><h3>Sem faturas para apresentar</h3><p>${message}</p></div>`;
       return;
     }
-    list.innerHTML = visible.map(invoice => `<article class="invoice-row"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong>${invoice.notes ? `<small class="invoice-notes">${escapeXml(invoice.notes)}</small>` : ""}</div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions history-actions"><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar" aria-label="Editar fatura">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar" aria-label="Eliminar fatura">×</button></div></article>`).join("");
+    list.innerHTML = visible.map(invoice => `<article class="invoice-row${isArchived(invoice) ? " is-archived" : ""}"><div class="invoice-main"><strong>${escapeXml(invoice.supplier)}</strong>${isArchived(invoice) ? '<small class="invoice-tag">Arquivada</small>' : ""}${invoice.notes ? `<small class="invoice-notes">${escapeXml(invoice.notes)}</small>` : ""}</div><time class="invoice-date" datetime="${escapeXml(invoice.date)}">${escapeXml(displayDate(invoice.date))}</time><strong class="invoice-total">${money(invoice.total)}</strong><div class="invoice-actions history-actions"><button class="icon-button" data-archive-invoice="${invoice.id}" title="${isArchived(invoice) ? "Repor (tirar do arquivo)" : "Arquivar"}" aria-label="${isArchived(invoice) ? "Repor fatura arquivada" : "Arquivar fatura"}">${isArchived(invoice) ? "↺" : "▣"}</button><button class="icon-button" data-edit-invoice="${invoice.id}" title="Editar" aria-label="Editar fatura">✎</button><button class="icon-button danger" data-delete-invoice="${invoice.id}" title="Eliminar" aria-label="Eliminar fatura">×</button></div></article>`).join("");
+    list.querySelectorAll("[data-archive-invoice]").forEach(button => button.addEventListener("click", async () => {
+      const invoice = invoices.find(item => item.id === button.dataset.archiveInvoice);
+      if (!invoice) return;
+      await writeInvoices([isArchived(invoice) ? restoredCopy(invoice) : archivedCopy(invoice)]);
+      await refresh();
+    }));
     list.querySelectorAll("[data-edit-invoice]").forEach(button => button.addEventListener("click", () => editInvoice(button.dataset.editInvoice)));
     list.querySelectorAll("[data-delete-invoice]").forEach(button => button.addEventListener("click", async () => { if (confirm("Eliminar esta fatura?")) { await deleteInvoice(button.dataset.deleteInvoice); await refresh(); } }));
   }
@@ -452,7 +490,9 @@
   }
 
   function formInvoice() {
-    return { id: $("#invoice-id").value || crypto.randomUUID(), number: normalizeInvoiceNumber($("#invoice-number").value), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), ownVatNumber: $("#invoice-own-vat-number").value.replace(/[\s.-]/g, ""), notes: $("#invoice-notes").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
+    const stored = invoices.find(item => item.id === $("#invoice-id").value);
+    const archiveState = stored && isArchived(stored) ? { archived: true, archivedAt: stored.archivedAt } : {}; // editar não tira a fatura do arquivo
+    return { ...archiveState, id: $("#invoice-id").value || crypto.randomUUID(), number: normalizeInvoiceNumber($("#invoice-number").value), date: $("#invoice-date").value, supplier: $("#invoice-supplier").value.trim(), vatNumber: $("#invoice-vat-number").value.trim(), ownVatNumber: $("#invoice-own-vat-number").value.replace(/[\s.-]/g, ""), notes: $("#invoice-notes").value.trim(), subtotal: parseMoney($("#invoice-subtotal").value), vat: parseMoney($("#invoice-vat").value), total: parseMoney($("#invoice-total").value), image: selectedImage || null, updatedAt: new Date().toISOString() };
   }
 
   function validateInvoice(invoice) {
@@ -472,35 +512,116 @@
     return "";
   }
 
-  function updateExport() {
-    const mode = $("#export-mode").value;
-    $("#export-start-wrap").classList.toggle("hidden", mode !== "dates");
-    $("#export-end-wrap").classList.toggle("hidden", mode !== "dates");
-    $("#export-supplier-wrap").classList.toggle("hidden", mode !== "supplier");
-    $("#export-own-wrap").classList.toggle("hidden", mode !== "own");
-    const suppliers = [...new Map(invoices.map(invoice => [invoice.vatNumber || invoice.supplier, invoice])).values()];
-    const supplierSelect = $("#export-supplier");
+  // Âmbito de seleção partilhado pela exportação e pelo menu Gerir: todas, intervalo de datas, fornecedor ou NIF próprio.
+  // `prefix` é "export" ou "manage" (os campos têm os mesmos nomes nas duas páginas).
+  function readScope(prefix) {
+    return { mode: $(`#${prefix}-mode`).value, start: $(`#${prefix}-start`).value, end: $(`#${prefix}-end`).value, supplier: $(`#${prefix}-supplier`).value, own: $(`#${prefix}-own`).value };
+  }
+
+  function filterScope(pool, scope) {
+    const completeDate = value => (/^\d{2}\/\d{2}\/\d{4}$/.test(value) ? inputDate(value) : ""); // datas a meio de escrever não filtram
+    if (scope.mode === "dates") { const from = completeDate(scope.start); const to = completeDate(scope.end); return pool.filter(invoice => (!from || invoice.date >= from) && (!to || invoice.date <= to)); }
+    if (scope.mode === "supplier") return scope.supplier ? pool.filter(invoice => (invoice.vatNumber || invoice.supplier) === scope.supplier) : [];
+    if (scope.mode === "own") return scope.own ? pool.filter(invoice => invoice.ownVatNumber === scope.own) : [];
+    return pool;
+  }
+
+  // Mostra só os campos da modalidade escolhida e reconstrói as listas de fornecedores e NIFs próprios
+  // a partir das faturas em causa (`pool`), mantendo a escolha do utilizador.
+  function fillScope(prefix, pool) {
+    const mode = $(`#${prefix}-mode`).value;
+    $(`#${prefix}-start-wrap`).classList.toggle("hidden", mode !== "dates");
+    $(`#${prefix}-end-wrap`).classList.toggle("hidden", mode !== "dates");
+    $(`#${prefix}-supplier-wrap`).classList.toggle("hidden", mode !== "supplier");
+    $(`#${prefix}-own-wrap`).classList.toggle("hidden", mode !== "own");
+    const suppliers = [...new Map(pool.map(invoice => [invoice.vatNumber || invoice.supplier, invoice])).values()];
+    const supplierSelect = $(`#${prefix}-supplier`);
     const chosenSupplier = supplierSelect.value; // a lista é reconstruída; manter a escolha do utilizador
     supplierSelect.innerHTML = '<option value="">Escolher fornecedor</option>' + suppliers.map(invoice => `<option value="${escapeXml(invoice.vatNumber || invoice.supplier)}">${escapeXml(invoice.supplier)}${invoice.vatNumber ? ` · ${escapeXml(invoice.vatNumber)}` : ""}</option>`).join("");
     supplierSelect.value = chosenSupplier;
-    // NIFs próprios existentes (com o número de faturas de cada um); mantém a escolha ao reconstruir a lista.
+    if (supplierSelect.selectedIndex < 0) supplierSelect.selectedIndex = 0; // a escolha deixou de existir
+    // NIFs próprios existentes, com o número de faturas de cada um.
     const ownCounts = new Map();
-    invoices.forEach(invoice => { if (invoice.ownVatNumber) ownCounts.set(invoice.ownVatNumber, (ownCounts.get(invoice.ownVatNumber) || 0) + 1); });
-    const ownSelect = $("#export-own");
+    pool.forEach(invoice => { if (invoice.ownVatNumber) ownCounts.set(invoice.ownVatNumber, (ownCounts.get(invoice.ownVatNumber) || 0) + 1); });
+    const ownSelect = $(`#${prefix}-own`);
     const chosenOwn = ownSelect.value;
     ownSelect.innerHTML = '<option value="">Escolher NIF próprio</option>' + [...ownCounts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([nif, count]) => `<option value="${escapeXml(nif)}">${escapeXml(nif)} · ${count} fatura${count === 1 ? "" : "s"}</option>`).join("");
     ownSelect.value = chosenOwn;
+    if (ownSelect.selectedIndex < 0) ownSelect.selectedIndex = 0;
+  }
+
+  // Exportação: só faturas ativas, a menos que se marque "Incluir faturas arquivadas".
+  const exportPool = () => ($("#export-archived").checked ? invoices : invoices.filter(invoice => !isArchived(invoice)));
+
+  function updateExport() {
+    fillScope("export", exportPool());
     const selected = currentExportInvoices();
     $("#export-count").textContent = selected.length;
     $("#export-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
   }
 
   function currentExportInvoices() {
-    const mode = $("#export-mode").value;
-    if (mode === "dates") return invoices.filter(invoice => (!$("#export-start").value || invoice.date >= inputDate($("#export-start").value)) && (!$("#export-end").value || invoice.date <= inputDate($("#export-end").value)));
-    if (mode === "supplier") { const key = $("#export-supplier").value; return key ? invoices.filter(invoice => (invoice.vatNumber || invoice.supplier) === key) : []; }
-    if (mode === "own") { const key = $("#export-own").value; return key ? invoices.filter(invoice => invoice.ownVatNumber === key) : []; }
+    return filterScope(exportPool(), readScope("export"));
+  }
+
+  // Menu Gerir: arquivar, repor ou eliminar várias faturas, com os mesmos âmbitos da exportação.
+  const manageState = { action: "archive" };
+  const MANAGE_TEXT = {
+    archive: { icon: "▣", verb: "Arquivar", label: "Faturas a arquivar", done: ["arquivada", "arquivadas"], help: "Arquivar mantém as faturas no histórico, mas deixam de entrar nos totais do início e na exportação." },
+    restore: { icon: "↺", verb: "Repor", label: "Faturas a repor", done: ["reposta", "repostas"], help: "Repor devolve as faturas arquivadas ao estado ativo." },
+    delete: { icon: "×", verb: "Eliminar", label: "Faturas a eliminar", done: ["eliminada", "eliminadas"], help: "Eliminar remove as faturas de forma definitiva. Se precisares delas, exporta primeiro." }
+  };
+
+  function managePool() {
+    if (manageState.action === "archive") return invoices.filter(invoice => !isArchived(invoice));
+    if (manageState.action === "restore") return invoices.filter(isArchived);
+    const state = $("#manage-state").value;
+    if (state === "active") return invoices.filter(invoice => !isArchived(invoice));
+    if (state === "archived") return invoices.filter(isArchived);
     return invoices;
+  }
+
+  function updateManage() {
+    const text = MANAGE_TEXT[manageState.action];
+    document.querySelectorAll("#manage-action .segment").forEach(button => { const on = button.dataset.action === manageState.action; button.classList.toggle("active", on); button.setAttribute("aria-pressed", String(on)); });
+    $("#manage-state-wrap").classList.toggle("hidden", manageState.action !== "delete");
+    $("#manage-help").textContent = text.help;
+    $("#manage-count-label").textContent = text.label;
+    const pool = managePool();
+    fillScope("manage", pool);
+    const selected = filterScope(pool, readScope("manage"));
+    $("#manage-count").textContent = selected.length;
+    $("#manage-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
+    const button = $("#manage-button");
+    button.disabled = !selected.length;
+    button.classList.toggle("is-danger", manageState.action === "delete");
+    $("#manage-button-icon").textContent = text.icon;
+    $("#manage-button-text").textContent = selected.length ? `${text.verb} ${selected.length} fatura${selected.length === 1 ? "" : "s"}` : text.verb;
+  }
+
+  async function runManage() {
+    const action = manageState.action;
+    const text = MANAGE_TEXT[action];
+    const selected = filterScope(managePool(), readScope("manage"));
+    if (!selected.length) return;
+    const subject = `${selected.length} fatura${selected.length === 1 ? "" : "s"} (${money(selected.reduce((sum, invoice) => sum + invoice.total, 0))})`;
+    if (action === "archive" && !confirm(`Arquivar ${subject}?\n\nFicam no histórico, mas deixam de entrar nos totais e na exportação.`)) return;
+    if (action === "restore" && !confirm(`Repor ${subject}?`)) return;
+    if (action === "delete") {
+      if (!confirm(`Eliminar ${subject} de forma definitiva?\n\nEsta ação não pode ser desfeita.`)) return;
+      if (selected.length > 1 && !confirm(`Confirmas? Vão ser eliminadas ${selected.length} faturas.`)) return;
+    }
+    const status = $("#manage-status");
+    try {
+      if (action === "delete") await writeInvoices([], selected.map(invoice => invoice.id));
+      else await writeInvoices(selected.map(action === "archive" ? archivedCopy : restoredCopy));
+    } catch (error) {
+      console.error(error);
+      status.textContent = "Não foi possível concluir a ação. Nada foi alterado.";
+      return;
+    }
+    await refresh();
+    status.textContent = `${selected.length} ${text.done[selected.length === 1 ? 0 : 1]}.`;
   }
 
   function safeFilename(value) {
@@ -545,7 +666,7 @@
     const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
-  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); }
+  async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); updateManage(); }
 
   document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
   $("#invoice-camera").addEventListener("change", event => readFile(event.target.files[0]));
@@ -583,8 +704,7 @@
   $("#clear-form").addEventListener("click", () => { $("#invoice-form").reset(); $("#invoice-id").value = ""; selectedImage = null; $("#image-preview-wrap").classList.add("hidden"); $("#form-error").textContent = ""; });
   $("#invoice-form").addEventListener("submit", async event => { event.preventDefault(); const invoice = formInvoice(); const error = validateInvoice(invoice); $("#form-error").textContent = error; if (error) return; await saveInvoice(invoice); await refresh(); $("#clear-form").click(); showPage("history"); });
   $("#history-search").addEventListener("input", renderHistory); $("#history-clear").addEventListener("click", () => { $("#history-search").value = ""; renderHistory(); });
-  ["#export-mode", "#export-start", "#export-end", "#export-supplier", "#export-own"].forEach(selector => $(selector).addEventListener("change", updateExport));
-  // Datas da exportação: coloca as barras automaticamente (dd/mm/aaaa) à medida que se escreve.
+  // Datas: coloca as barras automaticamente (dd/mm/aaaa) à medida que se escreve.
   const formatDateTyping = (value, deleting) => {
     const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
     let text = digits.slice(0, 2);
@@ -593,14 +713,27 @@
     if (!deleting && (digits.length === 2 || digits.length === 4)) text += "/";
     return text;
   };
-  ["#export-start", "#export-end"].forEach(selector => $(selector).addEventListener("input", event => {
-    const deleting = String(event.inputType || "").startsWith("delete");
-    event.target.value = formatDateTyping(event.target.value, deleting);
-    event.target.setCustomValidity("");
-    if (event.target.value.length === 10 || event.target.value.length === 0) updateExport();
-  }));
-  ["#export-start", "#export-end"].forEach(selector => $(selector).addEventListener("blur", event => { if (event.target.value && !/^\d{2}\/\d{2}\/\d{4}$/.test(event.target.value)) event.target.setCustomValidity("Usa o formato dia/mês/ano: dd/mm/aaaa."); else event.target.setCustomValidity(""); }));
+  // Liga os campos de âmbito (modalidade, datas, fornecedor, NIF próprio) de uma página: "export" ou "manage".
+  function bindScope(prefix, update) {
+    [`#${prefix}-mode`, `#${prefix}-start`, `#${prefix}-end`, `#${prefix}-supplier`, `#${prefix}-own`].forEach(selector => $(selector).addEventListener("change", update));
+    [`#${prefix}-start`, `#${prefix}-end`].forEach(selector => {
+      $(selector).addEventListener("input", event => {
+        const deleting = String(event.inputType || "").startsWith("delete");
+        event.target.value = formatDateTyping(event.target.value, deleting);
+        event.target.setCustomValidity("");
+        if (event.target.value.length === 10 || event.target.value.length === 0) update();
+      });
+      $(selector).addEventListener("blur", event => { if (event.target.value && !/^\d{2}\/\d{2}\/\d{4}$/.test(event.target.value)) event.target.setCustomValidity("Usa o formato dia/mês/ano: dd/mm/aaaa."); else event.target.setCustomValidity(""); });
+    });
+  }
+  bindScope("export", updateExport);
+  $("#export-archived").addEventListener("change", updateExport);
   $("#export-button").addEventListener("click", exportXlsx);
+  bindScope("manage", () => { $("#manage-status").textContent = ""; updateManage(); });
+  $("#manage-state").addEventListener("change", () => { $("#manage-status").textContent = ""; updateManage(); });
+  document.querySelectorAll("#manage-action .segment").forEach(button => button.addEventListener("click", () => { manageState.action = button.dataset.action; $("#manage-status").textContent = ""; updateManage(); }));
+  $("#manage-button").addEventListener("click", runManage);
+  document.querySelectorAll("#history-filters .chip").forEach(chip => chip.addEventListener("click", () => { historyFilter = chip.dataset.filter; renderHistory(); }));
 
   const themeButton = $("#theme-toggle"); const savedTheme = localStorage.getItem("invoice-theme"); if (savedTheme === "dark") document.documentElement.dataset.theme = "dark";
   themeButton?.addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; if (next === "dark") document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme; localStorage.setItem("invoice-theme", next); });

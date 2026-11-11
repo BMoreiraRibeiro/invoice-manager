@@ -39,3 +39,23 @@
 /* Observações e NIF próprio */
 .form-grid textarea{display:block;width:100%;min-width:0;min-height:76px;margin:0;padding:11px 12px;font-family:inherit;font-size:13px;line-height:1.4;resize:vertical}
 .invoice-main small.invoice-notes{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+
+/* Arquivo e menu Gerir */
+.filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 14px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted);font:inherit;font-size:13px;font-weight:650;cursor:pointer}
+.chip span{font-size:12px;opacity:.85}
+.chip.active{background:var(--soft);border-color:var(--accent);color:var(--accent)}
+.invoice-main small.invoice-tag{display:inline-block;margin-top:3px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--accent);font-size:11px;font-weight:700}
+.invoice-row.is-archived .invoice-main strong,.invoice-row.is-archived .invoice-total{color:var(--muted)}
+.history-actions{grid-template-columns:repeat(3,34px)}
+.export-panel .form-panel>.check-row{display:flex;align-items:center;gap:12px;margin:0 0 6px;font-size:15px;font-weight:600;cursor:pointer}
+.export-panel .form-panel .check-row input{width:22px;min-width:22px;height:22px;margin:0;padding:0;accent-color:var(--accent)}
+.segmented{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:4px;margin-bottom:18px;background:var(--soft);border-radius:12px}
+.segment{min-height:48px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.segment.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 4px rgba(24,39,75,.14)}
+.segment.danger.active{color:#c94c4c}
+.export-panel #manage-button{min-height:56px;margin-top:28px;font-size:16px}
+.primary-button.is-danger{background:#c94c4c;box-shadow:0 4px 10px rgba(201,76,76,.2)}
+.primary-button.is-danger:hover{background:#a93a3a}
+.primary-button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.manage-status{min-height:20px;margin:14px 0 0;color:var(--muted);font-size:14px;font-weight:600;text-align:center}
