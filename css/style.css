@@ -66,3 +66,16 @@
 .dashboard-filter{display:grid;gap:6px;max-width:340px;margin:0 0 16px;color:var(--muted);font-size:13px;font-weight:600}
 .dashboard-filter select{width:100%;min-width:0;height:48px;padding:0 14px;font:inherit;font-size:16px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .dashboard-filter select:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+.crop-editor{position:fixed;inset:0;z-index:40;display:grid;place-items:center}
+.crop-editor.hidden{display:none!important}
+.crop-dialog{position:relative;z-index:1;width:min(96vw,760px);max-height:96vh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 70px rgba(0,0,0,.35);overflow:hidden}
+.crop-hint{margin:0;padding:10px 16px 0;font-size:13px;color:var(--muted)}
+.crop-viewport{display:grid;place-items:center;padding:14px 22px;background:#080d16;margin-top:10px;min-height:0;overflow:hidden}
+.crop-stage{position:relative;line-height:0;touch-action:none;user-select:none}
+.crop-stage img{display:block;max-width:min(88vw,700px);max-height:62vh;width:auto;height:auto;pointer-events:none}
+.crop-shape{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.crop-shape polygon{fill:rgba(32,132,93,.18);stroke:#3ddc97;stroke-width:.6;vector-effect:non-scaling-stroke}
+.crop-handle{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;padding:0;border-radius:50%;border:3px solid #fff;background:#20845d;box-shadow:0 0 0 1px rgba(0,0,0,.5);touch-action:none;cursor:grab}
+.crop-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:12px;border-top:1px solid var(--line)}
+.crop-actions button{flex:1 1 140px}

@@ -261,7 +261,7 @@
     return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Não foi possível preparar a imagem.")), "image/jpeg", 0.9));
   }
 
-  async function cropDocument(file) {
+  async function cropDocumentLegacy(file) {
     const image = await loadImage(file);
     const scale = Math.min(1, 1800 / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
     const canvas = document.createElement("canvas");
@@ -286,6 +286,91 @@
       return canvasBlob(cropped);
     }
     return canvasBlob(canvas);
+  }
+
+  function isConvexQuad(quad) {
+    let sign = 0;
+    for (let i = 0; i < 4; i++) {
+      const [x1, y1] = quad[i], [x2, y2] = quad[(i + 1) % 4], [x3, y3] = quad[(i + 2) % 4];
+      const cross = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2);
+      if (Math.abs(cross) < 1e-6) return false;
+      if (!sign) sign = Math.sign(cross); else if (Math.sign(cross) !== sign) return false;
+    }
+    return true;
+  }
+
+  // Mostra a fotografia com 4 cantos arrastáveis. Devolve os cantos (0..1: SE, SD, ID, IE) ou null para não recortar.
+  function openCropEditor(file, detected) {
+    return new Promise(resolve => {
+      const src = URL.createObjectURL(file);
+      const editor = $("#crop-editor"), image = $("#crop-image"), handles = [...document.querySelectorAll("#crop-stage .crop-handle")];
+      let quad = detected.quad.map(point => point.slice());
+      const hint = $("#crop-hint");
+      const baseHint = detected.found ? "Recorte detetado automaticamente. Arrasta os cantos para ajustar." : "Não foi possível detetar o papel. Arrasta os cantos para o marcar.";
+      const draw = () => {
+        handles.forEach((handle, index) => { handle.style.left = `${quad[index][0] * 100}%`; handle.style.top = `${quad[index][1] * 100}%`; });
+        $("#crop-polygon").setAttribute("points", quad.map(point => `${point[0] * 100},${point[1] * 100}`).join(" "));
+      };
+      const clamp = value => Math.min(1, Math.max(0, value));
+      handles.forEach((handle, index) => {
+        handle.onpointerdown = event => { event.preventDefault(); handle.dataset.dragging = "1"; handle.setPointerCapture?.(event.pointerId); };
+        handle.onpointermove = event => {
+          if (!handle.dataset.dragging) return;
+          const box = image.getBoundingClientRect();
+          if (!box.width || !box.height) return;
+          quad[index] = [clamp((event.clientX - box.left) / box.width), clamp((event.clientY - box.top) / box.height)];
+          hint.textContent = baseHint;
+          draw();
+        };
+        const stop = () => { delete handle.dataset.dragging; };
+        handle.onpointerup = stop; handle.onpointercancel = stop;
+      });
+      const finish = result => { editor.classList.add("hidden"); image.removeAttribute("src"); URL.revokeObjectURL(src); resolve(result); };
+      $("#crop-apply").onclick = () => {
+        if (!isConvexQuad(quad)) { hint.textContent = "Os cantos estão cruzados. Ajusta-os para formarem um retângulo."; return; }
+        finish(quad);
+      };
+      $("#crop-detect").onclick = () => { quad = detected.quad.map(point => point.slice()); hint.textContent = baseHint; draw(); };
+      $("#crop-skip").onclick = () => finish(null);
+      hint.textContent = baseHint;
+      image.onload = draw;
+      image.src = src;
+      draw();
+      editor.classList.remove("hidden");
+    });
+  }
+
+  async function cropDocument(file) {
+    if (!window.DocCrop) return cropDocumentLegacy(file);
+    const image = await loadImage(file);
+    const naturalWidth = image.naturalWidth || image.width, naturalHeight = image.naturalHeight || image.height;
+    const scale = Math.min(1, 3000 / Math.max(naturalWidth, naturalHeight));
+    const full = document.createElement("canvas");
+    full.width = Math.max(1, Math.round(naturalWidth * scale)); full.height = Math.max(1, Math.round(naturalHeight * scale));
+    const fullContext = full.getContext("2d", { willReadFrequently: true });
+    fullContext.drawImage(image, 0, 0, full.width, full.height);
+    const smallScale = Math.min(1, 400 / Math.max(full.width, full.height));
+    const small = document.createElement("canvas");
+    small.width = Math.max(1, Math.round(full.width * smallScale)); small.height = Math.max(1, Math.round(full.height * smallScale));
+    const smallContext = small.getContext("2d", { willReadFrequently: true });
+    smallContext.drawImage(full, 0, 0, small.width, small.height);
+    let detected;
+    try { detected = window.DocCrop.detectQuad(smallContext.getImageData(0, 0, small.width, small.height).data, small.width, small.height); }
+    catch (error) { console.warn("Deteção do papel falhou:", error); detected = { quad: window.DocCrop.DEFAULT_QUAD.map(point => point.slice()), found: false }; }
+    setOcrStatus("Ajusta o recorte da fatura e carrega em “Usar recorte”.");
+    const quad = await openCropEditor(file, detected);
+    if (!quad) return canvasBlob(full);
+    setOcrStatus("A endireitar a fatura…");
+    await new Promise(resolve => setTimeout(resolve, 20)); // deixa o ecrã atualizar antes do cálculo
+    const points = quad.map(([x, y]) => [x * full.width, y * full.height]);
+    const size = window.DocCrop.outputSize(points);
+    const output = document.createElement("canvas");
+    output.width = size.width; output.height = size.height;
+    const outputContext = output.getContext("2d");
+    const result = outputContext.createImageData(size.width, size.height);
+    result.data.set(window.DocCrop.warp(fullContext.getImageData(0, 0, full.width, full.height).data, full.width, full.height, points, size.width, size.height));
+    outputContext.putImageData(result, 0, 0);
+    return canvasBlob(output);
   }
 
   function findMoney(line) {

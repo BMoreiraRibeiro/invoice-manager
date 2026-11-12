@@ -67,6 +67,7 @@
         </div>
       </section>
 
+      <div class="crop-editor hidden" id="crop-editor" role="dialog" aria-modal="true" aria-labelledby="crop-title"><div class="image-viewer-backdrop"></div><div class="crop-dialog"><div class="image-viewer-header"><h2 id="crop-title">Recortar fatura</h2></div><p class="crop-hint" id="crop-hint">Arrasta os cantos para ajustar o recorte.</p><div class="crop-viewport"><div class="crop-stage" id="crop-stage"><img id="crop-image" alt="Fotografia da fatura" draggable="false"><svg class="crop-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon id="crop-polygon" points=""></polygon></svg><button class="crop-handle" type="button" data-corner="0" aria-label="Canto superior esquerdo"></button><button class="crop-handle" type="button" data-corner="1" aria-label="Canto superior direito"></button><button class="crop-handle" type="button" data-corner="2" aria-label="Canto inferior direito"></button><button class="crop-handle" type="button" data-corner="3" aria-label="Canto inferior esquerdo"></button></div></div><div class="crop-actions"><button class="primary-button" type="button" id="crop-apply">Usar recorte</button><button class="secondary-button" type="button" id="crop-detect">Detetar de novo</button><button class="secondary-button" type="button" id="crop-skip">Sem recorte</button></div></div></div>
       <div class="image-viewer hidden" id="image-viewer" role="dialog" aria-modal="true" aria-labelledby="image-viewer-title"><div class="image-viewer-backdrop" data-close-viewer></div><div class="image-viewer-dialog"><div class="image-viewer-header"><h2 id="image-viewer-title">Pré-visualização da fatura</h2><button class="icon-button" type="button" id="close-image-viewer" aria-label="Fechar imagem" title="Fechar">×</button></div><div class="image-viewer-viewport" id="image-viewer-viewport"><img id="image-viewer-image" alt="Fatura ampliada"></div><div class="image-viewer-controls"><button class="icon-button" type="button" id="viewer-zoom-out" aria-label="Reduzir imagem" title="Reduzir">−</button><button class="icon-button" type="button" id="viewer-zoom-reset" aria-label="Tamanho original" title="Tamanho original">1×</button><button class="icon-button" type="button" id="viewer-zoom-in" aria-label="Ampliar imagem" title="Ampliar">＋</button></div></div></div>
 
       <section class="page" id="page-history">
@@ -88,7 +89,7 @@
         <div class="export-panel"><div class="form-panel"><div class="form-heading"><div><h2>Escolhe a ação e as faturas</h2><p class="muted" id="manage-help"></p></div></div><div class="segmented" id="manage-action" role="group" aria-label="Ação"><button class="segment active" type="button" data-action="archive" aria-pressed="true">Arquivar</button><button class="segment" type="button" data-action="restore" aria-pressed="false">Repor</button><button class="segment danger" type="button" data-action="delete" aria-pressed="false">Eliminar</button></div><label>Modalidade<select id="manage-mode"><option value="all">Todas as faturas</option><option value="dates">Intervalo de datas</option><option value="supplier">Fornecedor</option><option value="own">NIF próprio</option></select></label><div class="form-grid export-filters"><label id="manage-start-wrap">Data inicial<input id="manage-start" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label id="manage-end-wrap">Data final<input id="manage-end" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" autocomplete="off"></label><label class="wide" id="manage-supplier-wrap">Fornecedor<select id="manage-supplier"><option value="">Escolher fornecedor</option></select></label><label class="wide" id="manage-own-wrap">NIF próprio<select id="manage-own"><option value="">Escolher NIF próprio</option></select></label></div><label id="manage-state-wrap" class="hidden">Faturas a eliminar<select id="manage-state"><option value="all">Ativas e arquivadas</option><option value="active">Só ativas</option><option value="archived">Só arquivadas</option></select></label><button class="primary-button" id="manage-button" type="button" disabled><span id="manage-button-icon">▣</span><span id="manage-button-text">Arquivar</span></button><p class="manage-status" id="manage-status" role="status" aria-live="polite"></p></div></div>
       </section>
 
-      <footer class="app-footer"><span>Faturas · Versão 0.5.16</span><span id="storage-note">Armazenamento local ativo</span></footer>
+      <footer class="app-footer"><span>Faturas · Versão 0.5.17</span><span id="storage-note">Armazenamento local ativo</span></footer>
     </main>
   </div>
 
@@ -101,6 +102,7 @@
   </nav>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" crossorigin="anonymous"></script>
-  <script src="./js/app.js?v=0.5.16"></script>
+  <script src="./js/crop.js?v=0.5.17"></script>
+  <script src="./js/app.js?v=0.5.17"></script>
 </body>
 </html>

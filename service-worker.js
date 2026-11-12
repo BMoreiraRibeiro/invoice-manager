@@ -1,12 +1,13 @@
 /* Fase 1: cache da estrutura estática. Atualizar CACHE_VERSION quando os recursos mudarem. */
-const CACHE_VERSION = "invoice-manager-v48";
+const CACHE_VERSION = "invoice-manager-v49";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
   "./css/style.css",
   "./css/responsive.css",
-  "./js/app.js?v=0.5.16",
+  "./js/crop.js?v=0.5.17",
+  "./js/app.js?v=0.5.17",
   "./assets/icons/icon.svg",
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png"
