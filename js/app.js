@@ -573,6 +573,10 @@
     const selected = currentExportInvoices();
     $("#export-count").textContent = selected.length;
     $("#export-total").textContent = money(selected.reduce((sum, invoice) => sum + invoice.total, 0));
+    // O PDF leva uma página por fatura que tenha imagem; avisa quantas ficam de fora.
+    const withImage = selected.filter(invoice => invoice.image).length;
+    $("#export-pdf-note").textContent = !selected.length ? "" : !withImage ? "Nenhuma das faturas selecionadas tem imagem para o PDF." : withImage === selected.length ? `O PDF terá ${withImage} página${withImage === 1 ? "" : "s"}, uma por fatura.` : `O PDF terá ${withImage} página${withImage === 1 ? "" : "s"}: ${selected.length - withImage} fatura${selected.length - withImage === 1 ? " sem imagem fica" : "s sem imagem ficam"} de fora.`;
+    $("#export-pdf-button").disabled = !withImage;
   }
 
   function currentExportInvoices() {
@@ -643,17 +647,22 @@
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "Filtro";
   }
 
-  function exportFilename() {
+  // O Excel e o PDF da mesma seleção têm o mesmo nome, só muda a extensão.
+  function exportFilename(extension = "xlsx") {
     const mode = $("#export-mode").value;
     const today = displayDate(new Date().toISOString().slice(0, 10)).replaceAll("/", "-");
     if (mode === "dates") {
       const start = safeFilename($("#export-start").value || "Sem-inicio");
       const end = safeFilename($("#export-end").value || "Sem-fim");
-      return `Faturas-${start}-a-${end}.xlsx`;
+      return `Faturas-${start}-a-${end}.${extension}`;
     }
-    if (mode === "supplier") return `Faturas-${safeFilename($("#export-supplier").selectedOptions[0]?.textContent || "Fornecedor")}.xlsx`;
-    if (mode === "own") return `Faturas-NIF-${safeFilename($("#export-own").value || "proprio")}.xlsx`;
-    return `Faturas-Todas-${today}.xlsx`;
+    if (mode === "supplier") return `Faturas-${safeFilename($("#export-supplier").selectedOptions[0]?.textContent || "Fornecedor")}.${extension}`;
+    if (mode === "own") return `Faturas-NIF-${safeFilename($("#export-own").value || "proprio")}.${extension}`;
+    return `Faturas-Todas-${today}.${extension}`;
+  }
+
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
   function crc32(bytes) {
@@ -678,7 +687,129 @@
     const values = [header, ...rows.map(invoice => [invoice.number, displayDate(invoice.date), invoice.supplier, invoice.vatNumber, invoice.subtotal.toFixed(2), invoice.vat.toFixed(2), invoice.total.toFixed(2), invoice.ownVatNumber || "", invoice.notes || ""]), ["", "", "", "", "", "Total", rows.reduce((sum, invoice) => sum + invoice.total, 0).toFixed(2)]];
     const sheetRows = values.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, cellIndex) => `<c r="${String.fromCharCode(65 + cellIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`).join("")}</row>`).join("");
     const files = [{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' }, { name: "_rels/.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' }, { name: "xl/workbook.xml", data: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Faturas" sheetId="1" r:id="rId1"/></sheets></workbook>' }, { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' }, { name: "xl/worksheets/sheet1.xml", data: `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:I${values.length - 1}"/></worksheet>` }];
-    const url = URL.createObjectURL(zip(files)); const link = document.createElement("a"); link.href = url; link.download = exportFilename(); document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    downloadBlob(zip(files), exportFilename("xlsx"));
+  }
+
+  // ---- PDF com as imagens das faturas (uma por página) ----
+  // O PDF é gerado aqui, sem bibliotecas: as imagens JPEG entram tal como estão guardadas.
+  const blobBytes = blob => (blob.arrayBuffer ? blob.arrayBuffer() : new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsArrayBuffer(blob); })).then(buffer => new Uint8Array(buffer));
+
+  // Dimensões e tipo de um JPEG, lidos do cabeçalho (SOF). Devolve null se não for um JPEG que o PDF aceite diretamente.
+  function jpegInfo(bytes) {
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+    let offset = 2;
+    while (offset + 4 <= bytes.length) {
+      if (bytes[offset] !== 0xff) { offset++; continue; }
+      const marker = bytes[offset + 1];
+      if (marker === 0xff) { offset++; continue; }
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { offset += 2; continue; }
+      if (marker === 0xd9 || marker === 0xda) return null; // chegou aos dados sem encontrar o cabeçalho
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) { // baseline, sequencial estendido ou progressivo
+        const info = { precision: bytes[offset + 4], height: (bytes[offset + 5] << 8) | bytes[offset + 6], width: (bytes[offset + 7] << 8) | bytes[offset + 8], components: bytes[offset + 9] };
+        return info.precision === 8 && info.width > 0 && info.height > 0 && (info.components === 1 || info.components === 3) ? info : null;
+      }
+      if (marker >= 0xc3 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return null; // outros modos de compressão
+      offset += 2 + length;
+    }
+    return null;
+  }
+
+  // Orientação EXIF (1 = normal). Os visualizadores de PDF ignoram-na, por isso uma foto rodada tem de ser reconvertida.
+  function exifOrientation(bytes) {
+    let offset = 2;
+    while (offset + 4 <= bytes.length && bytes[offset] === 0xff) {
+      const marker = bytes[offset + 1];
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (marker === 0xe1 && bytes[offset + 4] === 0x45 && bytes[offset + 5] === 0x78 && bytes[offset + 6] === 0x69 && bytes[offset + 7] === 0x66) { // "Exif"
+        const tiff = offset + 10;
+        const little = bytes[tiff] === 0x49;
+        const u16 = position => (little ? bytes[position] | (bytes[position + 1] << 8) : (bytes[position] << 8) | bytes[position + 1]);
+        const u32 = position => (little ? (bytes[position] | (bytes[position + 1] << 8) | (bytes[position + 2] << 16) | (bytes[position + 3] << 24)) >>> 0 : ((bytes[position] << 24) | (bytes[position + 1] << 16) | (bytes[position + 2] << 8) | bytes[position + 3]) >>> 0);
+        const entries = u16(tiff + u32(tiff + 4));
+        for (let index = 0; index < entries; index++) {
+          const entry = tiff + u32(tiff + 4) + 2 + index * 12;
+          if (u16(entry) === 0x0112) return u16(entry + 8);
+        }
+        return 1;
+      }
+      if (marker === 0xda) break;
+      offset += 2 + length;
+    }
+    return 1;
+  }
+
+  // Imagem pronta para o PDF: JPEG direto quando possível; qualquer outro formato (PNG, WebP, rodado por EXIF, CMYK...) é reconvertido.
+  async function jpegPage(blob) {
+    let bytes = await blobBytes(blob);
+    let info = jpegInfo(bytes);
+    if (!info || exifOrientation(bytes) !== 1) {
+      const image = await loadImage(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, image.naturalWidth || image.width); canvas.height = Math.max(1, image.naturalHeight || image.height);
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height); // PNG com transparência
+      context.drawImage(image, 0, 0);
+      bytes = await blobBytes(await canvasBlob(canvas));
+      info = jpegInfo(bytes);
+    }
+    return info ? { bytes, width: info.width, height: info.height, components: info.components } : null;
+  }
+
+  // Monta o PDF: uma página A4 por imagem (deitada se a imagem for mais larga do que alta), centrada e com margens.
+  function buildPdf(pages) {
+    const chunks = []; const offsets = []; let length = 0;
+    const ascii = text => { const out = new Uint8Array(text.length); for (let index = 0; index < text.length; index++) out[index] = text.charCodeAt(index) & 255; return out; };
+    const push = data => { const chunk = typeof data === "string" ? ascii(data) : data; chunks.push(chunk); length += chunk.length; };
+    const object = (number, body) => { offsets[number] = length; push(`${number} 0 obj\n${body}\nendobj\n`); };
+    const A4 = [595.28, 841.89]; const margin = 28.35; // 10 mm
+    push("%PDF-1.4\n"); push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+    object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    object(2, `<< /Type /Pages /Kids [${pages.map((page, index) => `${3 + index * 3} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+    pages.forEach((page, index) => {
+      const [pageWidth, pageHeight] = page.width > page.height ? [A4[1], A4[0]] : A4;
+      const scale = Math.min((pageWidth - 2 * margin) / page.width, (pageHeight - 2 * margin) / page.height);
+      const drawWidth = page.width * scale; const drawHeight = page.height * scale;
+      const content = `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${((pageWidth - drawWidth) / 2).toFixed(2)} ${((pageHeight - drawHeight) / 2).toFixed(2)} cm /Im0 Do Q`;
+      const base = 3 + index * 3;
+      object(base, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth.toFixed(2)} ${pageHeight.toFixed(2)}] /Resources << /XObject << /Im0 ${base + 2} 0 R >> >> /Contents ${base + 1} 0 R >>`);
+      object(base + 1, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+      offsets[base + 2] = length;
+      push(`${base + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /${page.components === 1 ? "DeviceGray" : "DeviceRGB"} /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.bytes.length} >>\nstream\n`);
+      push(page.bytes); push("\nendstream\nendobj\n");
+    });
+    const size = 3 + pages.length * 3;
+    const xref = length;
+    push(`xref\n0 ${size}\n0000000000 65535 f \n`);
+    for (let number = 1; number < size; number++) push(`${String(offsets[number]).padStart(10, "0")} 00000 n \n`);
+    push(`trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  async function exportPdf() {
+    const selected = currentExportInvoices();
+    if (!selected.length) return alert("Não existem faturas para exportar com estes critérios.");
+    const withImage = selected.filter(invoice => invoice.image);
+    if (!withImage.length) return alert("Nenhuma das faturas selecionadas tem imagem.");
+    const button = $("#export-pdf-button");
+    const note = $("#export-pdf-note");
+    const label = button.innerHTML;
+    button.disabled = true;
+    const pages = []; let unreadable = 0;
+    try {
+      for (const [index, invoice] of withImage.entries()) {
+        button.textContent = `A gerar PDF… ${index + 1}/${withImage.length}`;
+        await new Promise(resolve => setTimeout(resolve)); // deixa o ecrã atualizar o progresso
+        try { const page = await jpegPage(invoice.image); if (page) pages.push(page); else unreadable++; } catch (error) { console.error(error); unreadable++; }
+      }
+      if (!pages.length) { note.textContent = "Não foi possível ler as imagens das faturas selecionadas."; return; }
+      downloadBlob(buildPdf(pages), exportFilename("pdf"));
+      const skipped = selected.length - pages.length;
+      note.textContent = `PDF gerado com ${pages.length} página${pages.length === 1 ? "" : "s"}.${skipped ? ` ${skipped} fatura${skipped === 1 ? " ficou" : "s ficaram"} de fora (${selected.length - withImage.length} sem imagem${unreadable ? `, ${unreadable} com imagem ilegível` : ""}).` : ""}`;
+    } finally {
+      button.disabled = false;
+      button.innerHTML = label;
+    }
   }
 
   async function refresh() { invoices = await getInvoices(); updateDashboard(); renderHistory(); updateExport(); updateManage(); }
@@ -744,6 +875,7 @@
   bindScope("export", updateExport);
   $("#export-archived").addEventListener("change", updateExport);
   $("#export-button").addEventListener("click", exportXlsx);
+  $("#export-pdf-button").addEventListener("click", exportPdf);
   bindScope("manage", () => { $("#manage-status").textContent = ""; updateManage(); });
   $("#manage-state").addEventListener("change", () => { $("#manage-status").textContent = ""; updateManage(); });
   document.querySelectorAll("#manage-action .segment").forEach(button => button.addEventListener("click", () => { manageState.action = button.dataset.action; $("#manage-status").textContent = ""; updateManage(); }));

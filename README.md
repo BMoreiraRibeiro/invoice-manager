@@ -14,6 +14,7 @@ PWA mobile-first para gestão local de faturas. A aplicação funciona sem backe
 - Arquivo de faturas: as arquivadas ficam no histórico (filtros Todas, Ativas e Arquivadas), mas deixam de contar no dashboard e, por defeito, na exportação (há uma opção para as incluir).
 - Menu Gerir: arquivar, repor ou eliminar várias faturas de uma vez, com os mesmos âmbitos da exportação (todas, intervalo de datas, fornecedor ou NIF próprio), resumo prévio e confirmação.
 - Exportação offline para XLSX com todos os registos, intervalo de datas, fornecedor, NIF próprio ou seleção individual. O ficheiro inclui as colunas NIF próprio e Observações.
+- Exportação das imagens das faturas selecionadas para um PDF (uma por página A4, com a mesma seleção do Excel). Faturas sem imagem ficam de fora e a app avisa quantas.
 - Tema claro/escuro.
 - Indicador de ligação.
 - Manifest PWA e ícones.

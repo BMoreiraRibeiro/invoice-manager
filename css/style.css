@@ -23,7 +23,9 @@
 .export-panel .form-panel>label{margin-bottom:15px}
 .export-panel .form-panel select,.export-panel .form-panel input{display:block;width:100%;min-width:0;height:56px;padding:14px 16px;font:inherit;font-size:17px;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .export-panel .form-panel select:focus,.export-panel .form-panel input:focus{outline:2px solid var(--accent);outline-offset:1px}
-.export-panel #export-button{min-height:56px;margin-top:28px;font-size:16px}
+.export-actions{display:grid;gap:12px;margin-top:28px}
+.export-panel .export-actions .primary-button,.export-panel .export-actions .secondary-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;font-size:16px}
+.export-note{min-height:20px;margin:14px 0 0;color:var(--muted);font-size:13px;font-weight:600;text-align:center}
 
 /* Fornecedor: lista de pesquisa própria (substitui o datalist) */
 .supplier-combo{position:relative;display:block;min-width:0}
