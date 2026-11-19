@@ -580,7 +580,7 @@
     ocrInProgress = true;
     try {
       const fields = await tryQr(file);
-      if (fields) { applyOcrFields(fields); selectedImage = file; $("#image-preview").src = URL.createObjectURL(file); $("#image-preview-wrap").classList.remove("hidden"); }
+      if (fields) applyOcrFields(fields); // o QR só preenche os dados: a imagem não é guardada
       else setOcrStatus("Não foi encontrado um código QR legível. Fotografa o QR de frente e com boa luz.", "error");
     } catch (error) {
       setOcrStatus(error.message || "Não foi possível ler o código QR.", "error");
